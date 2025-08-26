@@ -1,0 +1,66 @@
+<div style="padding:16px">
+  <h2 style="margin:0 0 12px">Редактор: /etc/systemd/network/10-vpn_vpn.network</h2>
+
+  <div id="status" style="margin:8px 0 12px; font-size:13px; color:#9ecbff;"></div>
+
+  <div style="margin-bottom:8px">
+    <button id="btnLoad">Загрузить с узла</button>
+    <button id="btnSave" style="margin-left:8px">Сохранить на узел</button>
+  </div>
+
+  <textarea id="editor" spellcheck="false"
+    style="width:100%; height:560px; font-family:monospace; font-size:13px; border:1px solid #333; background:#0b0b0b; color:#d8d8d8; padding:10px; border-radius:4px;"></textarea>
+</div>
+
+<script>
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const node = qs.get('node') || '';
+  const path = '/etc/systemd/network/10-vpn_vpn.network';
+  const statusEl = document.getElementById('status');
+  const editor = document.getElementById('editor');
+
+  function setStatus(msg, ok=true){
+    statusEl.style.color = ok ? '#9ecbff' : '#ff8a8a';
+    statusEl.textContent = msg || '';
+  }
+
+  async function api(action, body){
+    const url = `/pluginadmin.ashx?pin=vpnviewer&user=1&action=${action}&node=${encodeURIComponent(node)}&path=${encodeURIComponent(path)}`;
+    const opts = body ? { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) } : { method:'GET' };
+    const r = await fetch(url, opts);
+    return r.json();
+  }
+
+  // загрузка
+  document.getElementById('btnLoad').onclick = async () => {
+    setStatus('Читаю файл с агента…');
+    try {
+      const res = await api('read');
+      if (res.ok) {
+        editor.value = res.content || '';
+        setStatus('Файл загружен.');
+      } else {
+        setStatus('Ошибка чтения: ' + (res.error||'unknown'), false);
+      }
+    } catch(e) {
+      setStatus('Сбой запроса: ' + e, false);
+    }
+  };
+
+  // сохранение
+  document.getElementById('btnSave').onclick = async () => {
+    setStatus('Сохраняю файл на агенте…');
+    try {
+      const res = await api('write', { content: editor.value });
+      if (res.ok) setStatus('Сохранено.');
+      else setStatus('Ошибка записи: ' + (res.error||'unknown'), false);
+    } catch(e) {
+      setStatus('Сбой запроса: ' + e, false);
+    }
+  };
+
+  // авто-загрузка при открытии
+  document.getElementById('btnLoad').click();
+})();
+</script>
