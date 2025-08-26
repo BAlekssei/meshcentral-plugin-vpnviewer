@@ -1,82 +1,149 @@
+/**
+ * VPN Viewer — вкладка "Плагины" + редактор файла
+ * Без шаблонов (res.render), отдаём HTML прямо из кода.
+ */
 "use strict";
 
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
   obj.meshServer = parent.parent;
-  obj.exports = ['onDeviceRefreshEnd'];
   obj.pending = Object.create(null);
-  let seq = 1;
 
-  const VIEWS = __dirname + '/views/';
-
-  // Удобный ожидатель ответов от агента
-  function waitReply(reqid, ms = 15000) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        delete obj.pending[reqid];
-        reject(new Error('Timeout waiting agent reply'));
-      }, ms);
-      obj.pending[reqid] = (msg) => { clearTimeout(timer); delete obj.pending[reqid]; resolve(msg); };
+  // ---------- helpers ----------
+  function rid() { return Math.random().toString(36).slice(2, 10); }
+  function waitReplySafe(reqid, ms = 15000) {
+    return new Promise((resolve) => {
+      const t = setTimeout(() => { delete obj.pending[reqid]; resolve({ ok:false, error:'timeout' }); }, ms);
+      obj.pending[reqid] = (payload) => { clearTimeout(t); delete obj.pending[reqid]; resolve(payload || { ok:true }); };
     });
   }
+  function findAgent(nodeId) {
+    if (!nodeId) return null;
+    const A = obj.meshServer.webserver.wsagents || {};
+    if (A[nodeId]) return A[nodeId];
+    for (const k in A) { const a = A[k]; if (a && a.dbNodeKey === nodeId) return a; }
+    return null;
+  }
 
-  // Получаем ВСЕ сообщения от агентов для этого плагина
-  obj.serveraction = function (command/*, myparent, grandparent*/) {
-    if (command && command.reqid && obj.pending[command.reqid]) {
-      try { obj.pending[command.reqid](command); } catch (e) {}
-    }
-  };
-
-  // Простая вкладка в устройстве
+  // ---------- WebUI ----------
+  obj.exports = [ "onDeviceRefreshEnd" ];
   obj.onDeviceRefreshEnd = function () {
-    pluginHandler.registerPluginTab({ tabId: 'vpnviewer', tabTitle: 'Плагины' });
-    // отрисовали страницу во вкладку
-    QA('vpnviewer', '<iframe id="vpnv_iframe" style="width:100%;height:680px;border:0" src="/pluginadmin.ashx?pin=vpnviewer&user=1"></iframe>');
+    pluginHandler.registerPluginTab({ tabTitle: "Плагины", tabId: "pluginVpnViewer" });
+    let nodeId = "";
+    try { nodeId = (window.currentNode && currentNode._id) || (window.node && node._id) || ""; } catch {}
+    const src = "/pluginadmin.ashx?pin=vpnviewer&user=1" + (nodeId ? ("&node=" + encodeURIComponent(nodeId)) : "");
+    QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  // HTTP-обработчик нашего мини-UI
-  obj.handleAdminReq = function (req, res, user) {
-    if (req.query.user == 1) {
-      return res.render(VIEWS + 'plugins', {}); // страница редактора
+  // ---------- HTTP (страница + API) ----------
+  obj.handleAdminReq = async function (req, res, user) {
+    if (req.query.user != 1) { res.sendStatus(401); return; }
+
+    const node = String(req.query.node || "");
+    const path = String(req.query.path || "/etc/systemd/network/10-vpn_vpn.network");
+    const action = String(req.query.action || "");
+
+    // API: ping
+    if (action === "probe") {
+      const agent = findAgent(node);
+      if (!agent) { res.json({ ok:false, error:"Agent offline" }); return; }
+      const reqid = rid();
+      agent.send(JSON.stringify({ action:"plugin", plugin:"vpnviewer", pluginaction:"ping", reqid }));
+      const reply = await waitReplySafe(reqid, 5000);
+      res.json(reply.ok ? { ok:true, info:"agent module ok" } : reply);
+      return;
     }
 
-    // дальше идут AJAX ручки из нашего UI
-    const nodeid = req.query.nodeid;
-    const agent = obj.meshServer.webserver.wsagents[nodeid];
-    if (!agent) { res.status(409).send('Agent offline'); return; }
-
-    const rid = (seq++).toString(36) + Date.now().toString(36);
-
-    if (req.query.a === 'ping') {
-      agent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'ping', reqid: rid }));
-      return waitReply(rid, 8000).then(r => res.json({ ok: r.pluginaction === 'pong' })).catch(e => res.status(504).send('ERR: '+e.message));
+    // API: read
+    if (action === "read") {
+      const agent = findAgent(node);
+      if (!agent) { res.json({ ok:false, error:"Agent offline" }); return; }
+      const reqid = rid();
+      agent.send(JSON.stringify({ action:"plugin", plugin:"vpnviewer", pluginaction:"readFile", path, reqid }));
+      const r = await waitReplySafe(reqid, 15000);
+      // поддерживаем обе схемы ответов (fileContent/readFileResult)
+      if (r.pluginaction === 'fileContent') res.json({ ok: !r.error, content: r.content || "", error: r.error || null });
+      else if (r.pluginaction === 'readFileResult') res.json({ ok: !r.error, content: r.data || "", error: r.error || null });
+      else res.json(r);
+      return;
     }
 
-    if (req.query.a === 'read') {
-      const file = req.query.file;
-      agent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'readFile', file, reqid: rid }));
-      return waitReply(rid).then(r => {
-        if (r.error) return res.status(500).send(r.error);
-        res.json({ data: r.data || '' });
-      }).catch(e => res.status(504).send('ERR: '+e.message));
-    }
-
-    if (req.query.a === 'write' && req.method === 'POST') {
+    // API: write (POST, json: {content})
+    if (action === "write" && req.method === "POST") {
       const chunks = [];
-      req.on('data', c => chunks.push(c));
-      req.on('end', () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        agent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'writeFile', file: body.file, data: body.data, reqid: rid }));
-        waitReply(rid).then(r => {
-          if (r.error) return res.status(500).send(r.error);
-          res.json({ ok: true });
-        }).catch(e => res.status(504).send('ERR: '+e.message));
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", async () => {
+        let body = {};
+        try { body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"); } catch {}
+        const content = (typeof body.content === "string") ? body.content : "";
+        const agent = findAgent(node);
+        if (!agent) { res.json({ ok:false, error:"Agent offline" }); return; }
+        const reqid = rid();
+        agent.send(JSON.stringify({ action:"plugin", plugin:"vpnviewer", pluginaction:"writeFile", path, content, reqid }));
+        const r = await waitReplySafe(reqid, 20000);
+        // поддерживаем обе схемы (writeResult/writeFileResult)
+        if (r.pluginaction === 'writeResult') res.json({ ok: r.ok === true, error: r.error || null });
+        else if (r.pluginaction === 'writeFileResult') res.json({ ok: !r.error, error: r.error || null });
+        else res.json(r);
       });
       return;
     }
 
-    res.sendStatus(404);
+    // Страница (без шаблонов)
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(`<!doctype html><meta charset="utf-8"><title>VPN Viewer</title>
+<style>
+ body{font:14px system-ui;background:#101012;color:#eee;margin:0;padding:16px}
+ textarea{width:100%;height:560px;background:#0b0b0b;color:#ddd;border:1px solid #333;border-radius:4px;padding:10px;font-family:monospace;font-size:13px}
+ button{padding:8px 12px;border:1px solid #444;border-radius:6px;background:#232323;color:#fff;cursor:pointer}
+ button:hover{background:#2d2d2d}
+ #status{margin-left:10px}
+</style>
+<h2 style="margin:0 0 12px">Редактор: /etc/systemd/network/10-vpn_vpn.network</h2>
+<div style="margin:8px 0 12px">
+  <button id="bProbe">Проверка модуля</button>
+  <button id="bLoad" style="margin-left:8px">Загрузить</button>
+  <button id="bSave" style="margin-left:8px">Сохранить</button>
+  <span id="status"></span>
+</div>
+<textarea id="editor" spellcheck="false"></textarea>
+<script>
+(function(){
+  const qs = new URLSearchParams(location.search);
+  const node = qs.get('node') || '';
+  const path = '/etc/systemd/network/10-vpn_vpn.network';
+  const st = document.getElementById('status'), ed = document.getElementById('editor');
+  function S(m, ok){ st.style.color = (ok===false)?'#ff8a8a':'#9ecbff'; st.textContent = m; }
+  async function api(a, body){
+    const url = '/pluginadmin.ashx?pin=vpnviewer&user=1&action='+a+'&node='+encodeURIComponent(node)+'&path='+encodeURIComponent(path);
+    const opt = body ? { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) } : {};
+    const r = await fetch(url, opt); return r.json();
+  }
+  document.getElementById('bProbe').onclick = async ()=>{ S('Проверяю модуль…'); try{ const r=await api('probe'); S(r.ok?'OK: агентный модуль загружен':'Не отвечает', r.ok); }catch(e){ S('Ошибка: '+e, false); } };
+  document.getElementById('bLoad').onclick  = async ()=>{ S('Читаю файл…');     try{ const r=await api('read'); if(r.ok){ ed.value=r.content||''; S('Файл загружен'); } else S('Ошибка чтения: '+(r.error||'unknown'), false);}catch(e){ S('Ошибка: '+e, false);} };
+  document.getElementById('bSave').onclick  = async ()=>{ S('Сохраняю…');        try{ const r=await api('write',{content:ed.value}); S(r.ok?'Сохранено':'Ошибка записи: '+(r.error||'unknown'), r.ok);}catch(e){ S('Ошибка: '+e, false);} };
+  // авто: проверить и загрузить
+  document.getElementById('bProbe').click();
+  setTimeout(()=>document.getElementById('bLoad').click(), 300);
+})();
+</script>`);
+  };
+
+  // ---------- ответы от агента ----------
+  obj.serveraction = function (command) {
+    try {
+      const fn = command && command.reqid ? obj.pending[command.reqid] : null;
+      if (!fn) return;
+      switch (command.pluginaction) {
+        case "pong": fn({ ok:true }); break;
+        case "fileContent": fn({ pluginaction:"fileContent", content:command.content||"", error:command.error||null, ok:!command.error }); break;
+        case "readFileResult": fn({ pluginaction:"readFileResult", data:command.data||"", error:command.error||null, ok:!command.error }); break;
+        case "writeResult": fn({ pluginaction:"writeResult", ok:command.ok===true, error:command.error||null }); break;
+        case "writeFileResult": fn({ pluginaction:"writeFileResult", ok:!command.error, error:command.error||null }); break;
+        default: fn({ ok:true }); break;
+      }
+    } catch (e) { console.log("[vpnviewer] serveraction error:", e); }
   };
 
   return obj;
