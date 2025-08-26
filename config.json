@@ -1,0 +1,14 @@
+{
+  "name": "VPN Viewer",
+  "shortName": "vpnviewer",
+  "version": "0.0.1",
+  "author": "you",
+  "description": "Test plugin: adds VPN .network tab",
+  "hasAdminPanel": false,
+  "homepage": "https://github.com/BAlekssei/meshcentral-plugin-vpnviewer",
+  "changelogUrl": "https://raw.githubusercontent.com/BAlekssei/meshcentral-plugin-vpnviewer/main/CHANGELOG.md",
+  "configUrl": "https://raw.githubusercontent.com/BAlekssei/meshcentral-plugin-vpnviewer/main/config.json",
+  "downloadUrl": "https://github.com/BAlekssei/meshcentral-plugin-vpnviewer/archive/refs/heads/main.zip",
+  "repository": { "type": "git", "url": "https://github.com/BAlekssei/meshcentral-plugin-vpnviewer.git" },
+  "meshCentralCompat": ">=0.9.98"
+}
