@@ -1,27 +1,22 @@
-// vpnviewer.js
-// Правильный экспорт: module.exports.vpnviewer = function (...) { ... }
-
+// ИМЕНОВАННЫЙ экспорт: имя совпадает с shortName = "vpnviewer"
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
 
-  // Эти функции UI подхватит
-  obj.exports = ['registerPluginTab', 'onDeviceRefreshEnd', 'onWebUIStartupEnd'];
+  // Функции, которые будет дергать Web-UI
+  obj.exports = ['onWebUIStartupEnd', 'onDeviceRefreshEnd'];
 
-  // Регистрируем вкладку
-  obj.registerPluginTab = function () {
-    console.log('[vpnviewer] registerPluginTab()');
-    return { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
-  };
+  // ВАЖНО: объект, не функция — так сервер корректно создаёт вкладку и div p_vpnviewer
+  obj.registerPluginTab = { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
 
-  // Лог, что UI-часть плагина загрузилась
   obj.onWebUIStartupEnd = function () {
-    console.log('[vpnviewer] UI loaded');
+    try { console.log('[vpnviewer] UI loaded'); } catch (e) {}
   };
 
-  // Рисуем содержимое вкладки
   obj.onDeviceRefreshEnd = function (divid, currentNode) {
-    const host = document.getElementById(divid || 'p_vpnviewer');
+    // Контейнер вкладки создаёт сам MeshCentral: id = "p_" + tabId
+    const host = document.getElementById('p_vpnviewer');
+    console.log('[vpnviewer] onDeviceRefreshEnd; tab div exists =', !!host);
     if (!host || host.dataset.vpnviewerInit) return;
     host.dataset.vpnviewerInit = '1';
 
@@ -34,7 +29,7 @@ module.exports.vpnviewer = function (parent) {
         <div>Плагин установлен ✅</div>
         <div>Узел: <b>${esc(label)}</b></div>
         <hr/>
-        <pre>Здесь будет вывод /etc/systemd/network/10-vpn_vpn.network</pre>
+        <pre>Здесь позже выведем /etc/systemd/network/10-vpn_vpn.network</pre>
       </div>`;
   };
 
