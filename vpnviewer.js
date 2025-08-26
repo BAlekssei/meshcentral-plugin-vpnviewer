@@ -2,15 +2,14 @@
 
 // имя функции = shortName
 function vpnviewer(parent) {
-  var obj = {};
-  obj.parent = parent;
-  obj._version = "0.0.32";
+  var api = {};
+  api.parent = parent;
 
-  // Экспортируемые хуки (только то, что реально используем)
-  obj.exports = ["onWebUIStartupEnd", "goPageEnd", "onDeviceRefreshEnd"];
+  // экспортируем только то, что вызываем
+  api.exports = ["onWebUIStartupEnd", "goPageEnd", "onDeviceRefreshEnd"];
 
-  // ---------- Хелперы (ВЫЗЫВАЕМ ТОЛЬКО КАК obj.*) ----------
-  obj.addFloatingButton = function () {
+  // --- ВСЕ утилиты на window (без замыканий) ---
+  window.vpnviewerAddFloatingButton = window.vpnviewerAddFloatingButton || function () {
     if (typeof document === "undefined") return;
     if (document.getElementById("vpnviewer-fab")) return;
 
@@ -20,7 +19,7 @@ function vpnviewer(parent) {
     btn.title = "Тестовая кнопка из плагина";
     btn.style.position = "fixed";
     btn.style.bottom = "14px";
-    btn.style.right = "14px";
+    btn.style.right  = "14px";
     btn.style.zIndex = 99999;
     btn.style.padding = "8px 12px";
     btn.style.border = "1px solid #888";
@@ -33,44 +32,54 @@ function vpnviewer(parent) {
     try { console.log("[vpnviewer] floating button injected"); } catch(e){}
   };
 
-  obj.findActionBar = function () {
+  // ищем ряд кнопок по текстам (RU/EN)
+  window.vpnviewerFindActionBar = window.vpnviewerFindActionBar || function () {
     if (typeof document === "undefined") return null;
 
-    // Сначала известные селекторы
+    // сначала явные селекторы разных тем
     var known = ["#p10Buttons", "#dp_ActionBar", ".RightButtons", ".devicetoolbar .right"];
     for (var i = 0; i < known.length; i++) {
       var el = document.querySelector(known[i]);
       if (el) return el;
     }
 
-    // Фолбэк: ищем по текстам (учитывая русскую локализацию)
-    var texts = ["Run", "Сообщение", "Чат", "Поделиться", "Действия", "Примечания", "Добавить событие"];
-    var controls = document.querySelectorAll("input[type=button],button,a");
-    for (var j = 0; j < controls.length; j++) {
-      var t = (controls[j].value || controls[j].textContent || "").trim();
-      if (texts.indexOf(t) !== -1) {
-        var p = controls[j].parentElement, depth = 0;
-        while (p && depth < 4) {
-          var count = 0;
-          var kids = p.querySelectorAll("input[type=button],button,a");
-          for (var k = 0; k < kids.length; k++) {
-            var tt = (kids[k].value || kids[k].textContent || "").trim();
-            if (texts.indexOf(tt) !== -1) count++;
-          }
-          if (count >= 3) return p; // наш контейнер
-          p = p.parentElement; depth++;
+    // fallback: по подписям кнопок
+    var texts = ["Действия","Примечания","Добавить событие","Run","Сообщение","Чат","Поделиться"];
+    var nodes = document.querySelectorAll('input[type=button],button,a');
+    var best = null, bestCount = 0;
+
+    for (var j = 0; j < nodes.length; j++) {
+      var el = nodes[j];
+      var t = (el.value || el.textContent || "").trim();
+      if (texts.indexOf(t) === -1) continue;
+
+      var p = el.parentElement, depth = 0;
+      while (p && depth < 4) {
+        var count = 0;
+        var kids = p.querySelectorAll('input[type=button],button,a');
+        for (var k = 0; k < kids.length; k++) {
+          var tt = (kids[k].value || kids[k].textContent || "").trim();
+          if (texts.indexOf(tt) !== -1) count++;
         }
+        if (count > bestCount) { best = p; bestCount = count; }
+        p = p.parentElement; depth++;
       }
     }
-    return null;
+    return best;
   };
 
-  obj.addActionButton = function () {
+  window.vpnviewerAddActionButton = window.vpnviewerAddActionButton || function () {
     if (typeof document === "undefined") return;
     if (document.getElementById("vpnviewer-btn")) return;
 
-    var host = obj.findActionBar();
-    if (!host) { try { console.log("[vpnviewer] action bar not found yet"); } catch(e){}; return; }
+    // пробуем вставить сразу после последней известной кнопки
+    var labels = ["Поделиться","Чат","Сообщение","Run","Добавить событие","Примечания","Действия"];
+    var all = Array.from(document.querySelectorAll('input[type=button],button,a'));
+    var ref = null;
+    for (var i = 0; i < all.length; i++) {
+      var t = (all[i].value || all[i].textContent || "").trim();
+      if (labels.indexOf(t) !== -1) ref = all[i];
+    }
 
     var btn = document.createElement("input");
     btn.type = "button";
@@ -78,32 +87,54 @@ function vpnviewer(parent) {
     btn.value = "VPN Viewer";
     btn.onclick = function () { alert("VPN Viewer нажата"); };
 
-    host.appendChild(btn);
-    try { console.log("[vpnviewer] action button injected"); } catch(e){}
+    if (ref && ref.parentElement) {
+      ref.insertAdjacentElement("afterend", btn);
+      try { console.log("[vpnviewer] action button inserted after:", (ref.value || ref.textContent).trim()); } catch(e){}
+      return;
+    }
+
+    // если не нашли «реф», добавим в контейнер
+    var host = window.vpnviewerFindActionBar();
+    if (host) {
+      host.appendChild(btn);
+      try { console.log("[vpnviewer] action button injected to host"); } catch(e){}
+      return;
+    }
+
+    try { console.log("[vpnviewer] action bar not found (will retry)"); } catch(e){}
   };
 
-  // ---------- Хуки ----------
-  obj.onWebUIStartupEnd = function () {
-    if (typeof document === "undefined") return;
-    try { console.log("[vpnviewer] onWebUIStartupEnd fired v" + obj._version); } catch(e){}
-    try { alert("vpnviewer: hello from plugin v" + obj._version); } catch(e){}
+  // --- Хуки (только вызовы window.*) ---
+  api.onWebUIStartupEnd = function () {
+    try { console.log("[vpnviewer] onWebUIStartupEnd fired"); } catch(e){}
+    // alert можно убрать, просто для видимости
+    try { alert("vpnviewer: hello from plugin"); } catch(e){}
 
-    // ВАЖНО: вызываем через obj.*, а не this.*
-    obj.addFloatingButton();
-    obj.addActionButton();
+    window.vpnviewerAddFloatingButton();
+    window.vpnviewerAddActionButton();
 
-    // Немного ретраев на SPA-навигацию
-    var n = 0, iv = setInterval(function () {
-      obj.addFloatingButton();
-      obj.addActionButton();
-      if (++n > 40) clearInterval(iv); // ~10 секунд
-    }, 250);
+    // немного ретраев для SPA-навигации
+    if (!window.__vpnviewerRetry) {
+      var n = 0;
+      window.__vpnviewerRetry = setInterval(function(){
+        window.vpnviewerAddFloatingButton();
+        window.vpnviewerAddActionButton();
+        if (++n > 40) { clearInterval(window.__vpnviewerRetry); window.__vpnviewerRetry = null; }
+      }, 250);
+    }
   };
 
-  obj.goPageEnd = function () { obj.addFloatingButton(); obj.addActionButton(); };
-  obj.onDeviceRefreshEnd = function () { obj.addFloatingButton(); obj.addActionButton(); };
+  api.goPageEnd = function () {
+    window.vpnviewerAddFloatingButton();
+    window.vpnviewerAddActionButton();
+  };
 
-  return obj;
+  api.onDeviceRefreshEnd = function () {
+    window.vpnviewerAddFloatingButton();
+    window.vpnviewerAddActionButton();
+  };
+
+  return api;
 }
 
 module.exports = vpnviewer;
