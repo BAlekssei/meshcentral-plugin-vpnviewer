@@ -1,100 +1,85 @@
-/* vpnviewer.js — минимальный MeshCentral плагин с кнопкой в topbar */
+/* vpnviewer.js */
 (function () {
   function plugin(parent) {
     var obj = {};
     obj.parent = parent;
     obj._name = 'vpnviewer';
-    obj._title = 'VPN Viewer';
+    obj._title = 'VPN Viewer (topbar)';
+    const logSrv = (m)=>{ try{ console.log('[vpnviewer][srv]', m);}catch{} };
 
-    // ===== Backend hook: регистрируем простой роут =====
-    // Даст страничку плагина на /plugins/vpnviewer
-    obj.hook_setupHttpHandlers = function (app/*express app*/, express) {
+    // ===== BACKEND HOOKS =====
+    obj.server_startup = function () {
+      logSrv('server_startup: plugin loaded');
+    };
+
+    obj.hook_setupHttpHandlers = function (app, express) {
+      logSrv('hook_setupHttpHandlers');
       app.get('/plugins/vpnviewer', function (req, res) {
-        // базовая защита: пусть страница открывается только авторизованным
         if (!req || !req.session || !req.session.userid) { res.redirect('/'); return; }
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<!doctype html>
-<html><head><meta charset="utf-8"><title>${obj._title}</title>
-<style>body{font:14px/1.4 system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#111;color:#ddd;margin:0;padding:24px}</style>
-</head><body>
-<h2 style="margin-top:0">${obj._title}</h2>
-<p>Это заглушка страницы плагина. Здесь можно отрендерить ваш VPN-виджет/фрейм/лог.</p>
-</body></html>`);
+        res.end(`<!doctype html><meta charset="utf-8"><title>VPN Viewer</title>
+<style>body{font:14px system-ui;background:#111;color:#ddd;margin:0;padding:24px}</style>
+<h2>VPN Viewer</h2><p>Страница плагина работает.</p>`);
       });
     };
 
-    // ===== Web UI: вставка кнопки в topbar =====
-    function ensureStyle() {
+    // ===== WEB UI HOOKS =====
+    function log(msg){ try{ console.log('[vpnviewer][ui]', msg);}catch{} }
+
+    function ensureStyle(){
       if (document.getElementById('vpnviewer-topbar-style')) return;
       var s = document.createElement('style');
       s.id = 'vpnviewer-topbar-style';
       s.textContent =
         '#vpnviewer-topbar-wrap{position:absolute;right:10px;top:8px;display:flex;gap:8px;align-items:center;z-index:5}' +
-        '#vpnviewer-topbar-btn{padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.2);' +
-        'background:#2d2d2d;color:#fff;cursor:pointer;font-size:12px;line-height:1}' +
+        '#vpnviewer-topbar-btn{padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:#2d2d2d;color:#fff;cursor:pointer;font-size:12px}' +
         '#vpnviewer-topbar-btn:hover{background:#3b3b3b}';
       document.head.appendChild(s);
     }
 
-    function addTopbarButton() {
-      try {
-        var topbar = document.getElementById('topbar');
-        if (!topbar) return;
+    function addTopbarButton(){
+      var topbar = document.getElementById('topbar');
+      if (!topbar) { log('no #topbar yet'); return false; }
+      if (document.getElementById('vpnviewer-topbar-btn')) { return true; }
 
-        // уже добавлена?
-        if (document.getElementById('vpnviewer-topbar-btn')) return;
+      ensureStyle();
+      var wrap = document.getElementById('vpnviewer-topbar-wrap');
+      if (!wrap) { wrap = document.createElement('div'); wrap.id = 'vpnviewer-topbar-wrap'; topbar.appendChild(wrap); }
 
-        ensureStyle();
+      var btn = document.createElement('button');
+      btn.id = 'vpnviewer-topbar-btn';
+      btn.type = 'button';
+      btn.textContent = 'VPN';
+      btn.title = 'VPN Viewer';
+      btn.onclick = function(e){ e.preventDefault(); window.open('/plugins/vpnviewer','_blank','noopener'); };
+      wrap.appendChild(btn);
 
-        // контейнер справа
-        var wrap = document.getElementById('vpnviewer-topbar-wrap');
-        if (!wrap) {
-          wrap = document.createElement('div');
-          wrap.id = 'vpnviewer-topbar-wrap';
-          // topbar в MeshCentral имеет relative; абсолют к правому краю тут ок
-          topbar.appendChild(wrap);
-        }
-
-        var btn = document.createElement('button');
-        btn.id = 'vpnviewer-topbar-btn';
-        btn.type = 'button';
-        btn.title = obj._title;
-        btn.textContent = 'VPN';
-        btn.onclick = function (e) {
-          e.preventDefault();
-          // откроем страницу плагина (можно заменить на внешний URL)
-          window.open('/plugins/vpnviewer', '_blank', 'noopener');
-        };
-
-        wrap.appendChild(btn);
-      } catch (e) {
-        // не падаем при смене страниц
-        try { console.error('vpnviewer: addTopbarButton error', e); } catch (_) {}
-      }
+      log('button added to #topbar');
+      return true;
     }
 
-    // Web-UI hooks: вызываются на старте и при смене страниц
-    obj.onWebUIStartupEnd = function () { addTopbarButton(); };
-    obj.goPageEnd = function () { addTopbarButton(); };
-    obj.onDeviceRefreshEnd = function () { addTopbarButton(); };
+    function tryAddNowAndLater(){
+      // попытка сразу
+      if (addTopbarButton()) return;
+      // и несколько повторных попыток (SPA перерисовывает DOM)
+      var tries = 0, t = setInterval(function(){
+        tries++; if (addTopbarButton() || tries>20) clearInterval(t);
+      }, 250);
+    }
 
-    // экспортировать наружу из браузера можно доп. функции, если захотите
+    obj.onWebUIStartupEnd = function(){ log('onWebUIStartupEnd'); tryAddNowAndLater(); };
+    obj.goPageEnd          = function(){ log('goPageEnd');          tryAddNowAndLater(); };
+    obj.onDeviceRefreshEnd = function(){ log('onDeviceRefreshEnd'); tryAddNowAndLater(); };
+
+    // экспортов не требуется, но оставим каркас
     obj.exports = [];
-
     return obj;
   }
 
-  // Экспорт для backend и регистрация в браузере
+  // ===== EXPORTS (Node.js / Browser) =====
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = plugin;
+    module.exports = plugin;               // сервер подхватит
   } else if (typeof pluginHandler !== 'undefined') {
-    // у разных версий названия могут отличаться — аккуратная регистрация
-    try {
-      if (typeof pluginHandler.addPlugin === 'function') pluginHandler.addPlugin('vpnviewer', plugin);
-      else if (typeof pluginHandler.register === 'function') pluginHandler.register('vpnviewer', plugin);
-      else if (typeof pluginHandler.set === 'function') pluginHandler.set('vpnviewer', plugin);
-    } catch (e) {
-      console.error('vpnviewer: register error', e);
-    }
+    try { pluginHandler.addPlugin('vpnviewer', plugin); } catch(e){ console.error('vpnviewer register error', e); }
   }
 })();
