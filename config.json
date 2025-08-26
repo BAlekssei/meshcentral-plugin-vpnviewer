@@ -1,8 +1,8 @@
 {
   "name": "VPN Viewer",
   "shortName": "vpnviewer",
-  "version": "0.0.1",
-  "author": "you",
+  "version": "0.0.2",
+  "author": "BAlekssei",
   "description": "Test plugin: adds VPN .network tab",
   "hasAdminPanel": false,
   "homepage": "https://github.com/BAlekssei/meshcentral-plugin-vpnviewer",
