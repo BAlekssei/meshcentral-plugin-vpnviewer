@@ -36,6 +36,13 @@ module.exports.vpnviewer = function (parent) {
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
+    // Позволяет команде "plugin vpnviewer ..." не падать
+  obj.consoleaction = function (args /* array */, myparent, grandparent) {
+    // Можно вернуть синхронную строку (сервер сразу выведет её в консоль)
+    // Эта команда НЕ общается с агентом — используйте вкладку «Плагины» для реального пинга.
+    return "vpnviewer server plugin: console ok. Для проверки агента используйте вкладку «Плагины» → «Проверка модуля».";
+  };
+  
   // ---------- HTTP (страница + API) ----------
   obj.handleAdminReq = async function (req, res, user) {
     if (req.query.user != 1) { res.sendStatus(401); return; }
