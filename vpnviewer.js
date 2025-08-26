@@ -1,45 +1,40 @@
-"use strict";
+// This is the main plugin object
+var vpnViewerPlugin = {};
 
-function vpnviewer(parent) {
-  const api = {};
-  api.parent = parent;
-  api.exports = ["onWebUIStartupEnd"];
+// This function is called when the web UI is fully loaded.
+// We will add our button here.
+vpnViewerPlugin.onWebUIStartupEnd = function () {
+    // Find the target element where we want to add the button.
+    // Based on the screenshot, a good place is the 'basset' div inside 'topbar'.
+    const topBar = document.getElementById('topbar');
+    if (topBar) {
+        const basset = topBar.querySelector('.basset');
+        if (basset) {
+            // Create a new button element
+            const newButton = document.createElement('button');
 
-  api.onWebUIStartupEnd = function () {
-    if (typeof window === "undefined" || typeof document === "undefined") return;
+            // Set button properties
+            newButton.className = 'button'; // You can style it further with CSS if needed
+            newButton.innerText = 'VPN'; // The text on the button
 
-    // внутри iframe
-    const f = document.getElementById("p14frame");
-    if (!f || !f.contentWindow || !f.contentWindow.document) return;
-    const doc = f.contentWindow.document;
+            // Add an action to the button (e.g., show an alert)
+            newButton.onclick = function () {
+                alert('VPN Viewer button clicked!');
+                // You can replace this with any other JavaScript function,
+                // for example, opening a new window or a dialog box.
+            };
 
-    // уже есть?
-    if (doc.getElementById("vpnviewer-topfab")) return;
+            // Add the button to the 'basset' element
+            basset.appendChild(newButton);
+        } else {
+            console.log('VPN Viewer Plugin: .basset element not found in #topbar.');
+        }
+    } else {
+        console.log('VPN Viewer Plugin: #topbar element not found.');
+    }
+};
 
-    // создаём кнопку
-    const btn = doc.createElement("button");
-    btn.id = "vpnviewer-topfab";
-    btn.textContent = "VPN Viewer";
-    btn.title = "Тестовая кнопка сверху";
-    btn.style.position = "fixed";
-    btn.style.top = "10px";
-    btn.style.right = "12px";
-    btn.style.zIndex = "99999";
-    btn.style.padding = "6px 10px";
-    btn.style.border = "1px solid #888";
-    btn.style.borderRadius = "6px";
-    btn.style.background = "#fff";
-    btn.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
-    btn.onclick = function () {
-      alert("VPN Viewer Top Click");
-    };
-
-    doc.body.appendChild(btn);
-    try { console.log("[vpnviewer] top floating button injected"); } catch (_) {}
-  };
-
-  return api;
-}
-
-module.exports = vpnviewer;
-module.exports.vpnviewer = vpnviewer;
+// Register the startup function. The name of the function must match the value of 'shortName' in config.json.
+// In this case, it's 'vpnviewer'.
+// We are assigning our plugin object to a global variable that MeshCentral will look for.
+pluginHandler.vpnviewer = vpnViewerPlugin;
