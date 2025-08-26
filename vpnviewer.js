@@ -1,27 +1,46 @@
 module.exports = function (parent) {
   const obj = {};
   obj.parent = parent;
-  obj.exports = ['registerPluginTab', 'onWebUIStartupEnd'];
+  obj.exports = ['registerPluginTab', 'onDeviceRefreshEnd'];
 
   obj.registerPluginTab = function () {
     console.log('[vpnviewer] registerPluginTab');
     return { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
   };
 
-  obj.onWebUIStartupEnd = function () {
-    console.log('[vpnviewer] UI loaded');
-    // Просто добавим кнопку в верхнее меню (без панели)
-    const consoleBtn = document.querySelector('a[href*="console"]');
-    if (consoleBtn) {
-      const btn = document.createElement('a');
-      btn.href = 'javascript:void(0)';
+  obj.onDeviceRefreshEnd = function (divid, currentNode) {
+    try {
+      console.log('[vpnviewer] onDeviceRefreshEnd');
+
+      // Ищем тулбар устройства
+      const toolbar = document.querySelector('.device-toolbar');
+      if (!toolbar) {
+        console.warn('[vpnviewer] Тулбар не найден!');
+        return;
+      }
+
+      // Проверяем, что кнопка ещё не добавлена
+      if (document.getElementById('vpnviewer-button')) {
+        console.log('[vpnviewer] Кнопка уже добавлена');
+        return;
+      }
+
+      // Создаём кнопку
+      const btn = document.createElement('button');
+      btn.id = 'vpnviewer-button';
+      btn.className = 'device-toolbar-button'; // Используем стандартный класс MeshCentral
       btn.textContent = 'VPN .network';
       btn.style.marginLeft = '8px';
-      btn.onclick = () => alert('Кнопка работает!');
-      consoleBtn.parentNode.insertBefore(btn, consoleBtn.nextSibling);
-      console.log('[vpnviewer] Кнопка добавлена');
-    } else {
-      console.warn('[vpnviewer] Кнопка "Консоль" не найдена!');
+      btn.onclick = () => {
+        alert('Кнопка VPN .network работает!');
+        // Здесь можно добавить логику загрузки конфига
+      };
+
+      // Добавляем кнопку в тулбар
+      toolbar.appendChild(btn);
+      console.log('[vpnviewer] Кнопка добавлена в тулбар');
+    } catch (e) {
+      console.error('[vpnviewer] Ошибка:', e);
     }
   };
 
