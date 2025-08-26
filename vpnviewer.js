@@ -1,40 +1,57 @@
 "use strict";
 
-// имя функции = shortName из config.json
+// имя функции ДОЛЖНО совпадать с shortName
 function vpnviewer(parent) {
   var obj = {};
   obj.parent = parent;
 
-  // экспортируем только один веб-хук
-  obj.exports = [ "goPageEnd" ];
+  // экспортируем ДВА хука, чтобы наверняка
+  obj.exports = ["onWebUIStartupEnd", "goPageEnd"];
 
-  // вызывается при завершении рендера любой страницы
+  // добавляет плавающую кнопку (без привязки к разметке MeshCentral)
+  function addFloatingButton() {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("vpnviewer-fab")) return;
+
+    var btn = document.createElement("button");
+    btn.id = "vpnviewer-fab";
+    btn.textContent = "VPN Viewer";
+    btn.title = "Это тестовая кнопка из плагина";
+    btn.style.position = "fixed";
+    btn.style.bottom = "14px";
+    btn.style.right = "14px";
+    btn.style.zIndex = 99999;
+    btn.style.padding = "8px 12px";
+    btn.style.border = "1px solid #888";
+    btn.style.borderRadius = "6px";
+    btn.style.background = "#fff";
+    btn.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+    btn.onclick = function(){ alert("Кнопка работает"); };
+    document.body.appendChild(btn);
+
+    try { console.log("[vpnviewer] floating button injected"); } catch(e){}
+  }
+
+  obj.onWebUIStartupEnd = function () {
+    if (typeof document === "undefined") return;
+    try { console.log("[vpnviewer] onWebUIStartupEnd fired"); } catch(e){}
+    try { alert("vpnviewer: hello from plugin"); } catch(e){}
+    addFloatingButton();
+
+    // на всякий случай повторяем попытку несколько секунд (SPA-навигация)
+    var n = 0, iv = setInterval(function(){
+      n++; addFloatingButton();
+      if (n > 40) clearInterval(iv); // ~10 секунд
+    }, 250);
+  };
+
   obj.goPageEnd = function () {
-    if (typeof document === "undefined") return; // выполняем только в браузере
-
-    // пробуем найти контейнер панели действий на странице устройства
-    var host =
-      document.getElementById("p10Buttons") ||     // классическая тема
-      document.querySelector("#dp_ActionBar") ||   // иногда так
-      document.querySelector(".RightButtons");     // запасной вариант
-
-    if (!host) return;                             // мы не на странице устройства
-    if (document.getElementById("vpnviewer-btn")) return; // кнопку уже добавили
-
-    // создаём саму кнопку
-    var btn = document.createElement("input");
-    btn.type = "button";
-    btn.id = "vpnviewer-btn";
-    btn.value = "VPN Viewer";
-    btn.onclick = function () { alert("Кнопка работает"); };
-
-    host.appendChild(btn);
-    try { console.log("[vpnviewer] button injected"); } catch (e) {}
+    addFloatingButton();
   };
 
   return obj;
 }
 
-// экспорт совместим с загрузчиком MeshCentral
+// совместимые экспорты
 module.exports = vpnviewer;
 module.exports.vpnviewer = vpnviewer;
