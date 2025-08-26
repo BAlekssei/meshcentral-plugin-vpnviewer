@@ -1,85 +1,81 @@
-/* vpnviewer.js */
-(function () {
-  function plugin(parent) {
-    var obj = {};
-    obj.parent = parent;
-    obj._name = 'vpnviewer';
-    obj._title = 'VPN Viewer (topbar)';
-    const logSrv = (m)=>{ try{ console.log('[vpnviewer][srv]', m);}catch{} };
+/**
+ * @description MeshCentral VPNViewer (adds Plugins tab)
+ * @license Apache-2.0
+ */
+"use strict";
 
-    // ===== BACKEND HOOKS =====
-    obj.server_startup = function () {
-      logSrv('server_startup: plugin loaded');
-    };
+module.exports.vpnviewer = function (parent) {
+  var obj = {};
+  obj.parent = parent;
+  obj.meshServer = parent.parent;
+  obj.db = null;                 // не используется, оставлено для совместимости с примером
+  obj.intervalTimer = null;      // не используется, оставлено для совместимости
+  obj.debug = obj.meshServer.debug;
+  obj.VIEWS = __dirname + '/views/';  // можно задействовать позже
 
-    obj.hook_setupHttpHandlers = function (app, express) {
-      logSrv('hook_setupHttpHandlers');
-      app.get('/plugins/vpnviewer', function (req, res) {
-        if (!req || !req.session || !req.session.userid) { res.redirect('/'); return; }
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<!doctype html><meta charset="utf-8"><title>VPN Viewer</title>
-<style>body{font:14px system-ui;background:#111;color:#ddd;margin:0;padding:24px}</style>
-<h2>VPN Viewer</h2><p>Страница плагина работает.</p>`);
-      });
-    };
+  // Эти функции будут экспортированы в браузер (важно!)
+  obj.exports = [
+    'onDeviceRefreshEnd',
+    'resizeContent'
+  ];
 
-    // ===== WEB UI HOOKS =====
-    function log(msg){ try{ console.log('[vpnviewer][ui]', msg);}catch{} }
+  // ====== SERVER HOOKS ======
+  obj.server_startup = function () {
+    try { obj.debug('Plugin', 'vpnviewer', 'server_startup'); }
+    catch (e) { console.log('[vpnviewer] server_startup'); }
+  };
 
-    function ensureStyle(){
-      if (document.getElementById('vpnviewer-topbar-style')) return;
-      var s = document.createElement('style');
-      s.id = 'vpnviewer-topbar-style';
-      s.textContent =
-        '#vpnviewer-topbar-wrap{position:absolute;right:10px;top:8px;display:flex;gap:8px;align-items:center;z-index:5}' +
-        '#vpnviewer-topbar-btn{padding:5px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:#2d2d2d;color:#fff;cursor:pointer;font-size:12px}' +
-        '#vpnviewer-topbar-btn:hover{background:#3b3b3b}';
-      document.head.appendChild(s);
+  // Обработчик /pluginadmin.ashx?pin=vpnviewer&...
+  obj.handleAdminReq = function (req, res, user) {
+    if (req.query.user == 1) {
+      // Простейшая страница — сюда поместите ваш UI
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(`<!doctype html><meta charset="utf-8"><title>Plugins</title>
+<style>
+  body{font:14px system-ui;background:#101012;color:#e6e6e6;margin:0;padding:16px}
+  h2{margin:0 0 12px}
+  button{padding:8px 12px;border:1px solid #444;border-radius:6px;background:#232323;color:#fff;cursor:pointer}
+  button:hover{background:#2d2d2d}
+</style>
+<h2>Plugins</h2>
+<p>Это вкладка, добавленная плагином <b>vpnviewer</b>. Поместите сюда ваш VPN-виджет/панель.</p>
+<button onclick="alert('Демонстрационное действие')">Проверка кнопки</button>`);
+      return;
     }
-
-    function addTopbarButton(){
-      var topbar = document.getElementById('topbar');
-      if (!topbar) { log('no #topbar yet'); return false; }
-      if (document.getElementById('vpnviewer-topbar-btn')) { return true; }
-
-      ensureStyle();
-      var wrap = document.getElementById('vpnviewer-topbar-wrap');
-      if (!wrap) { wrap = document.createElement('div'); wrap.id = 'vpnviewer-topbar-wrap'; topbar.appendChild(wrap); }
-
-      var btn = document.createElement('button');
-      btn.id = 'vpnviewer-topbar-btn';
-      btn.type = 'button';
-      btn.textContent = 'VPN';
-      btn.title = 'VPN Viewer';
-      btn.onclick = function(e){ e.preventDefault(); window.open('/plugins/vpnviewer','_blank','noopener'); };
-      wrap.appendChild(btn);
-
-      log('button added to #topbar');
-      return true;
+    if (req.query.include == 1 && req.query.path) {
+      // опциональная раздача статики: /pluginadmin.ashx?pin=vpnviewer&include=1&path=foo.js
+      switch (req.query.path.split('.').pop()) {
+        case 'css': res.contentType('text/css'); break;
+        case 'js':  res.contentType('text/javascript'); break;
+      }
+      res.sendFile(__dirname + '/includes/' + req.query.path);
+      return;
     }
+    res.sendStatus(401);
+  };
 
-    function tryAddNowAndLater(){
-      // попытка сразу
-      if (addTopbarButton()) return;
-      // и несколько повторных попыток (SPA перерисовывает DOM)
-      var tries = 0, t = setInterval(function(){
-        tries++; if (addTopbarButton() || tries>20) clearInterval(t);
-      }, 250);
-    }
+  // ====== UI HOOKS (в браузере) ======
+  // Добавляем вкладку «Plugins» на странице устройства
+  obj.onDeviceRefreshEnd = function () {
+    // регистрируем вкладку (если уже есть — повторная регистрация безопасна)
+    pluginHandler.registerPluginTab({
+      tabTitle: 'Plugins',
+      tabId: 'pluginVPNViewer'
+    });
 
-    obj.onWebUIStartupEnd = function(){ log('onWebUIStartupEnd'); tryAddNowAndLater(); };
-    obj.goPageEnd          = function(){ log('goPageEnd');          tryAddNowAndLater(); };
-    obj.onDeviceRefreshEnd = function(){ log('onDeviceRefreshEnd'); tryAddNowAndLater(); };
+    // наполняем её iframe-ом с нашим UI
+    QA('pluginVPNViewer',
+      '<iframe id="pluginIframeVPNViewer" ' +
+      'style="width:100%;height:700px;overflow:auto" ' +
+      'scrolling="yes" frameBorder="0" ' +
+      'src="/pluginadmin.ashx?pin=vpnviewer&user=1"></iframe>');
+  };
 
-    // экспортов не требуется, но оставим каркас
-    obj.exports = [];
-    return obj;
-  }
+  // Можно дергать для подстройки высоты
+  obj.resizeContent = function () {
+    var i = document.getElementById('pluginIframeVPNViewer');
+    if (i) i.style.height = '700px';
+  };
 
-  // ===== EXPORTS (Node.js / Browser) =====
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = plugin;               // сервер подхватит
-  } else if (typeof pluginHandler !== 'undefined') {
-    try { pluginHandler.addPlugin('vpnviewer', plugin); } catch(e){ console.error('vpnviewer register error', e); }
-  }
-})();
+  return obj;
+};
