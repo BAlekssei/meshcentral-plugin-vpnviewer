@@ -1,25 +1,29 @@
-// vpnviewer.js — таб рядом с "Консоль" + панель и чтение файла
+// Плагин MeshCentral: вкладка "VPN .network" + кнопка рядом с «Консоль» + чтение файла
+// ВАЖНО: именованный экспорт с именем как в shortName (vpnviewer)
 
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
 
+  // Хуки, которые UI реально вызывает (как в ScriptTask)
   obj.exports = ['registerPluginTab', 'onWebUIStartupEnd', 'onDeviceRefreshEnd', 'goPageEnd'];
 
-  // Если сервер умеет — зарегистрируем полноценную вкладку
+  // --- 1) Регистрация вкладки (стандартный путь)
   obj.registerPluginTab = function () {
     try { console.log('[vpnviewer] registerPluginTab()'); } catch (_) {}
     return { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
   };
 
-  obj.onWebUIStartupEnd = function () { console.log('[vpnviewer] UI loaded'); };
+  obj.onWebUIStartupEnd = function () { try { console.log('[vpnviewer] UI loaded'); } catch (_) {} };
+
+  // --- 2) Доп. инъекция кнопки рядом с «Консоль», если вкладку не рисуют
   obj.goPageEnd = function () { try { injectTopTabButton(); } catch (_) {} };
 
+  // --- 3) Рендер содержимого (вкладка или наш контейнер)
   obj.onDeviceRefreshEnd = function (divid, currentNode) {
     try {
       injectTopTabButton();
 
-      // если сервер создал таб — рисуем прямо туда
       const tabHost = document.getElementById('p_vpnviewer');
       if (tabHost && !tabHost.dataset.vpnviewerInit) {
         tabHost.dataset.vpnviewerInit = '1';
@@ -28,9 +32,8 @@ module.exports.vpnviewer = function (parent) {
         return;
       }
 
-      // иначе — вставим нашу панель в начало контента
       let panel = document.getElementById('vpnviewer_panel');
-      if (!panel) panel = createPinnedPanel();
+      if (!panel) panel = createPinnedPanel(divid);
       if (panel && !panel.dataset.vpnviewerInit) {
         panel.dataset.vpnviewerInit = '1';
         renderPanel(panel, currentNode);
@@ -41,12 +44,12 @@ module.exports.vpnviewer = function (parent) {
     }
   };
 
-  // ---------- helpers ----------
+  // ===== helpers (объявлены на верхнем уровне, чтобы были видны и в goPageEnd) =====
 
   function injectTopTabButton() {
     if (document.getElementById('vpnviewer_topbtn')) return;
 
-    // ищем кнопку/ссылку "Консоль"
+    // ищем кнопку/линк «Консоль» и вставляем нашу рядом
     const els = Array.from(document.querySelectorAll('a,button,input[type=button]'));
     let consoleBtn = null;
     for (const el of els) {
@@ -59,10 +62,12 @@ module.exports.vpnviewer = function (parent) {
     btn.id = 'vpnviewer_topbtn';
     btn.href = 'javascript:void(0)';
     btn.textContent = 'VPN .network';
-    btn.className = consoleBtn.className || '';  // наследуем стили табов
+    btn.className = consoleBtn.className || '';
     btn.style.marginLeft = '8px';
     btn.addEventListener('click', () => {
-      const host = document.getElementById('p_vpnviewer') || document.getElementById('vpnviewer_panel') || createPinnedPanel();
+      // показать нашу панель (если вкладки нет)
+      let host = document.getElementById('p_vpnviewer');
+      if (!host) host = document.getElementById('vpnviewer_panel') || createPinnedPanel();
       if (!host) return;
       if (!host.dataset.vpnviewerInit) renderPanel(host, window.currentNode || null);
       host.style.display = '';
@@ -74,8 +79,9 @@ module.exports.vpnviewer = function (parent) {
     console.log('[vpnviewer] top tab injected next to Console');
   }
 
-  function createPinnedPanel() {
-    const page = document.getElementById('p11') || document.querySelector('#p_content') || document.body;
+  function createPinnedPanel(divid) {
+    const page = document.getElementById('p11') || (divid ? document.getElementById(divid) : null) ||
+                 document.getElementById('p12') || document.querySelector('#p_content') || document.body;
     if (!page) return null;
     const panel = document.createElement('div');
     panel.id = 'vpnviewer_panel';
@@ -88,8 +94,10 @@ module.exports.vpnviewer = function (parent) {
     return panel;
   }
 
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function getMS() { return window.meshserver || (window.parent && window.parent.meshserver); }
+  function getNodeId(currentNode) {
+    return (currentNode && currentNode._id) || (getMS() && getMS().currentNode && getMS().currentNode._id) || null;
   }
 
   function renderPanel(host, currentNode) {
@@ -108,10 +116,8 @@ module.exports.vpnviewer = function (parent) {
     const status = host.querySelector('#vpnv-status');
 
     btn.addEventListener('click', () => {
-      const nodeid =
-        (currentNode && currentNode._id) ||
-        (window.meshserver && window.meshserver.currentNode && window.meshserver.currentNode._id);
-      const ms = window.meshserver || (window.parent && window.parent.meshserver);
+      const nodeid = getNodeId(currentNode);
+      const ms = getMS();
 
       if (!nodeid) { status.textContent = 'nodeid не найден'; return; }
       if (!ms || typeof ms.send !== 'function') { status.textContent = 'meshserver недоступен'; return; }
@@ -121,13 +127,14 @@ module.exports.vpnviewer = function (parent) {
 
       const tag = 'vpnviewer-' + Date.now();
       const cmd = "sh -lc 'cat /etc/systemd/network/10-vpn_vpn.network 2>/dev/null || echo \"(файл не найден)\"'; echo __VPNVIEW_EOF__";
+      console.log('[vpnviewer] send runcommands to', nodeid, 'tag=', tag);
 
       function onmsg(msg) {
         if (!msg || msg.action !== 'runcommands' || msg.tag !== tag) return;
         if (typeof msg.output === 'string') {
           out.textContent += msg.output;
           if (out.textContent.indexOf('__VPNVIEW_EOF__') !== -1) {
-            out.textContent = out.textContent.replace(/\s*__VPNVIEW_EOF__\\s*$/, '');
+            out.textContent = out.textContent.replace(/\s*__VPNVIEW_EOF__\s*$/, '');
             ms.removeEventListener && ms.removeEventListener('servermsg', onmsg);
             status.textContent = 'Готово';
           }
