@@ -1,6 +1,7 @@
 // Плагин MeshCentral: добавляет вкладку "VPN .network" (только заглушка)
 
-module.exports.vpnviewer = function (parent) {
+// Export plugin function directly so MeshCentral can load it
+module.exports = function (parent) {
   const obj = {};
   obj.parent = parent;
 
