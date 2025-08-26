@@ -1,22 +1,22 @@
 "use strict";
 
-// имя функции ДОЛЖНО совпадать с shortName
+// имя функции = shortName
 function vpnviewer(parent) {
   var obj = {};
   obj.parent = parent;
 
-  // экспортируем ДВА хука, чтобы наверняка
+  // экспортируем только то, что реально используем
   obj.exports = ["onWebUIStartupEnd", "goPageEnd"];
 
-  // добавляет плавающую кнопку (без привязки к разметке MeshCentral)
-  function addFloatingButton() {
+  // ВАЖНО: хелперы как методы объекта (а не свободные функции)
+  obj.addFloatingButton = function () {
     if (typeof document === "undefined") return;
     if (document.getElementById("vpnviewer-fab")) return;
 
     var btn = document.createElement("button");
     btn.id = "vpnviewer-fab";
     btn.textContent = "VPN Viewer";
-    btn.title = "Это тестовая кнопка из плагина";
+    btn.title = "Тестовая кнопка из плагина";
     btn.style.position = "fixed";
     btn.style.bottom = "14px";
     btn.style.right = "14px";
@@ -30,28 +30,30 @@ function vpnviewer(parent) {
     document.body.appendChild(btn);
 
     try { console.log("[vpnviewer] floating button injected"); } catch(e){}
-  }
+  };
 
   obj.onWebUIStartupEnd = function () {
     if (typeof document === "undefined") return;
     try { console.log("[vpnviewer] onWebUIStartupEnd fired"); } catch(e){}
     try { alert("vpnviewer: hello from plugin"); } catch(e){}
-    addFloatingButton();
 
-    // на всякий случай повторяем попытку несколько секунд (SPA-навигация)
-    var n = 0, iv = setInterval(function(){
-      n++; addFloatingButton();
-      if (n > 40) clearInterval(iv); // ~10 секунд
+    // ВЫЗЫВАЕМ ЧЕРЕЗ this.* (важно!)
+    this.addFloatingButton();
+
+    // и подстрахуемся на SPA-навигацию
+    var n = 0;
+    var iv = setInterval(() => {
+      this.addFloatingButton();
+      if (++n > 40) clearInterval(iv);
     }, 250);
   };
 
   obj.goPageEnd = function () {
-    addFloatingButton();
+    this.addFloatingButton();
   };
 
   return obj;
 }
 
-// совместимые экспорты
 module.exports = vpnviewer;
 module.exports.vpnviewer = vpnviewer;
