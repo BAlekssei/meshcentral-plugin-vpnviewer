@@ -1,30 +1,31 @@
-// vpnviewer.js (исправленный)
 'use strict';
 
-// ВАЖНО: именованный экспорт равный shortName из config.json
-exports.vpnviewer = function (parent) {
+// Одна фабрика плагина
+function vpnviewer(parent) {
   const obj = {};
   obj.parent = parent;
-  obj._version = '0.0.27';
+  obj._version = '0.0.28';
   obj._name = 'vpnviewer';
 
-  // Backend hook (опционально для проверки загрузки)
+  // --- Backend: отметка в логе, что плагин подхватился
   obj.server_startup = function () {
-    try { obj.parent.debug?.(`vpnviewer ${obj._version} loaded`); } catch (e) {}
+    try { parent?.debug?.(`vpnviewer ${obj._version} loaded`); } catch (_) {}
   };
 
-  // Зарегистрировать вкладку устройства
+  // --- Web UI: регистрируем вкладку устройства
   obj.registerPluginTab = function () {
     return { tabId: obj._name, tabTitle: 'VPN .network' };
   };
 
-  // Добавить кнопку в панель действий на странице устройства
+  // --- Web UI: добавляем кнопку в панель действий карточки устройства
   obj.onDeviceRefreshEnd = function () {
+    // На сервере 'document' отсутствует — на всякий случай защитимся
+    if (typeof document === 'undefined') return;
     try {
       if (document.getElementById('vpnviewer-button')) return;
 
       const candidates = ['#p10Buttons', '#dp_ActionBar', '.h2 .right', '.RightButtons', '.devicetoolbar .right'];
-      let host = candidates.map(sel => document.querySelector(sel)).find(Boolean);
+      const host = candidates.map(s => document.querySelector(s)).find(Boolean);
       if (!host) return;
 
       const btn = document.createElement('div');
@@ -36,6 +37,7 @@ exports.vpnviewer = function (parent) {
         display: 'inline-block', padding: '4px 8px', marginLeft: '6px',
         border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', userSelect: 'none'
       });
+
       btn.addEventListener('click', () => {
         try {
           const tabBtn =
@@ -45,6 +47,7 @@ exports.vpnviewer = function (parent) {
           if (tabBtn) tabBtn.click(); else alert('VPN Viewer: вкладка «VPN .network» добавлена (заглушка).');
         } catch { alert('VPN Viewer'); }
       });
+
       host.appendChild(btn);
 
       const tabDiv = document.getElementById('vpnviewer') || document.querySelector('#vpnviewer, [data-panel="vpnviewer"]');
@@ -52,13 +55,17 @@ exports.vpnviewer = function (parent) {
         const wrap = document.createElement('div');
         wrap.style.padding = '12px';
         wrap.innerHTML = `<h3 style="margin:0 0 8px">VPN Viewer</h3>
-          <p style="margin:0 0 8px">Пока что это заглушка. Далее тут выведем информацию по VPN-интерфейсам.</p>`;
+          <p style="margin:0 0 8px">Пока заглушка. Дальше тут выведем VPN-интерфейсы.</p>`;
         tabDiv.appendChild(wrap);
       }
     } catch (e) { try { console.log('vpnviewer onDeviceRefreshEnd error:', e); } catch {} }
   };
 
-  // Функции, доступные в Web UI
+  // Список функций, доступных в Web UI
   obj.exports = ['onDeviceRefreshEnd', 'registerPluginTab'];
   return obj;
-};
+}
+
+// ВАЖНО: экспортируем и как default, и как именованную функцию "vpnviewer"
+module.exports = vpnviewer;
+module.exports.vpnviewer = vpnviewer;
