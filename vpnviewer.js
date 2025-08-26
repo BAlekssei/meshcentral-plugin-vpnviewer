@@ -1,15 +1,17 @@
-// Мини-плагин: создаёт вкладку "VPN .network" и выводит заглушку.
-// ВАЖНО: module.exports.<shortName> и НЕ класть registerPluginTab в exports.
+// Плагин MeshCentral: добавляет вкладку "VPN .network" (только заглушка)
 
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
 
-  // Только функции тут! (Иначе объект превратится в [object Object] в UI-скрипте)
-  obj.exports = ['onWebUIStartupEnd', 'onDeviceRefreshEnd'];
+  // Экспортируемые в Web UI функции (как у ScriptTask)
+  obj.exports = ['registerPluginTab', 'onWebUIStartupEnd', 'onDeviceRefreshEnd'];
 
-  // Спец-поле, которое MeshCentral сам подхватит при сборке UI
-  obj.registerPluginTab = { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
+  // ВАЖНО: ФУНКЦИЯ, возвращающая { tabId, tabTitle }
+  obj.registerPluginTab = function () {
+    try { console.log('[vpnviewer] registerPluginTab()'); } catch (e) {}
+    return { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
+  };
 
   obj.onWebUIStartupEnd = function () {
     try { console.log('[vpnviewer] UI loaded'); } catch (e) {}
@@ -17,7 +19,8 @@ module.exports.vpnviewer = function (parent) {
 
   obj.onDeviceRefreshEnd = function (divid, currentNode) {
     try {
-      const host = document.getElementById(divid || 'p_vpnviewer') || document.getElementById('p_vpnviewer');
+      console.log('[vpnviewer] onDeviceRefreshEnd, divid =', divid);
+      const host = document.getElementById(divid || 'p_vpnviewer');
       if (!host) { console.warn('[vpnviewer] host div not found'); return; }
       if (host.dataset.vpnviewerInit) return;
       host.dataset.vpnviewerInit = '1';
@@ -33,9 +36,7 @@ module.exports.vpnviewer = function (parent) {
           <hr/>
           <pre>Здесь будет вывод /etc/systemd/network/10-vpn_vpn.network</pre>
         </div>`;
-    } catch (e) {
-      try { console.warn('[vpnviewer] onDeviceRefreshEnd error:', e); } catch (_) {}
-    }
+    } catch (e) { try { console.warn('[vpnviewer] onDeviceRefreshEnd error:', e); } catch (_) {} }
   };
 
   return obj;
