@@ -4,140 +4,120 @@
 function vpnviewer(parent) {
   var api = {};
   api.parent = parent;
-
-  // экспортируемые браузерные хуки
   api.exports = ["onWebUIStartupEnd", "goPageEnd", "onDeviceRefreshEnd"];
 
-  // ---------- ВСЁ ниже работает и в топ-странице, и внутри iframe ----------
-  // Получить document активного контента (внутри p14frame, если он есть)
+  // === утилиты кладём на window (без замыканий) ===
   window.vpnviewerGetDoc = window.vpnviewerGetDoc || function () {
     try {
-      var f = document.getElementById("p14frame")
-           || document.querySelector('iframe#p14frame, iframe[name="p14frame"], iframe[id^="p"], iframe[src*="commander"]');
+      var f = document.getElementById("p14frame") ||
+              document.querySelector('iframe#p14frame, iframe[name="p14frame"], iframe[src*="commander"]');
       if (f && f.contentWindow && f.contentWindow.document) return f.contentWindow.document;
     } catch (e) {}
-    return document; //fallback
+    return document;
   };
 
-  // Плавающая кнопка (внутри активного документа)
-  window.vpnviewerAddFloatingButton = window.vpnviewerAddFloatingButton || function () {
+  // 1) Плавающая кнопка СВЕРХУ справа (внутри iframe)
+  window.vpnviewerAddTopFloatingButton = window.vpnviewerAddTopFloatingButton || function () {
     var doc = window.vpnviewerGetDoc();
-    if (!doc || !doc.body || doc.getElementById("vpnviewer-fab")) return;
+    if (!doc || !doc.body || doc.getElementById("vpnviewer-topfab")) return;
 
     var btn = doc.createElement("button");
-    btn.id = "vpnviewer-fab";
+    btn.id = "vpnviewer-topfab";
     btn.textContent = "VPN Viewer";
     btn.title = "Тестовая кнопка из плагина";
     btn.style.position = "fixed";
-    btn.style.bottom = "14px";
-    btn.style.right  = "14px";
-    btn.style.zIndex = 2147483647; // поверх всего внутри фрейма
-    btn.style.padding = "8px 12px";
+    btn.style.top = "8px";
+    btn.style.right = "12px";
+    btn.style.zIndex = 2147483647;
+    btn.style.padding = "6px 10px";
     btn.style.border = "1px solid #888";
     btn.style.borderRadius = "6px";
     btn.style.background = "#fff";
     btn.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
-    btn.onclick = function(){ alert("Кнопка работает"); };
+    btn.onclick = function(){ alert("VPN Viewer (top)"); };
     doc.body.appendChild(btn);
 
-    try { console.log("[vpnviewer] floating button injected into", doc.location.href); } catch(e){}
+    try { console.log("[vpnviewer] top floating button injected"); } catch(e){}
   };
 
-  // Найти панель с кнопками действий на странице устройства
-  window.vpnviewerFindActionBar = window.vpnviewerFindActionBar || function () {
+  // найти контейнер верхних вкладок (Сводка / Рабочий стол / …)
+  window.vpnviewerFindTopTabs = window.vpnviewerFindTopTabs || function () {
     var doc = window.vpnviewerGetDoc();
     if (!doc) return null;
 
-    // Известные селекторы
-    var known = ["#p10Buttons", "#dp_ActionBar", ".RightButtons", ".devicetoolbar .right"];
+    // известные селекторы разных тем
+    var known = ["#p10Tabs", "#dp_Menu", ".h2 .left", ".h2", ".tabArea", ".devicetabs", ".MHeader"];
     for (var i = 0; i < known.length; i++) {
       var el = doc.querySelector(known[i]);
-      if (el) return el;
+      if (el && el.querySelectorAll("a").length >= 3) return el;
     }
 
-    // Fallback: по подписям RU/EN
-    var texts = ["Действия","Примечания","Добавить событие","Run","Сообщение","Чат","Поделиться"];
-    var nodes = doc.querySelectorAll('input[type=button],button,a');
-    var best = null, bestCount = 0;
+    // fallback: ищем родителя множества ссылок с подписями RU/EN
+    var labels = ["Сводка","Рабочий стол","Терминал","Файлы","События","Детали","Консоль",
+                  "Overview","Desktop","Terminal","Files","Events","Details","Console"];
+    var anchors = Array.from(doc.querySelectorAll("a"));
+    var best = null, bestScore = 0;
 
-    for (var j = 0; j < nodes.length; j++) {
-      var el = nodes[j];
-      var t = (el.value || el.textContent || "").trim();
-      if (texts.indexOf(t) === -1) continue;
-
-      var p = el.parentElement, depth = 0;
-      while (p && depth < 4) {
-        var count = 0;
-        var kids = p.querySelectorAll('input[type=button],button,a');
-        for (var k = 0; k < kids.length; k++) {
-          var tt = (kids[k].value || kids[k].textContent || "").trim();
-          if (texts.indexOf(tt) !== -1) count++;
+    anchors.forEach(function(a){
+      var txt = (a.textContent || "").trim();
+      if (labels.indexOf(txt) === -1) return;
+      var p = a.parentElement, depth = 0;
+      while (p && depth < 3) {
+        var score = 0;
+        var as = p.querySelectorAll("a");
+        for (var k = 0; k < as.length; k++) {
+          var t = (as[k].textContent || "").trim();
+          if (labels.indexOf(t) !== -1) score++;
         }
-        if (count > bestCount) { best = p; bestCount = count; }
+        if (score > bestScore) { best = p; bestScore = score; }
         p = p.parentElement; depth++;
       }
-    }
+    });
     return best;
   };
 
-  // Вставить кнопку в ряд «Действия / Run / …» (внутри фрейма)
-  window.vpnviewerAddActionButton = window.vpnviewerAddActionButton || function () {
+  // 2) Кнопка «VPN» в ряд вкладок сверху (внутри iframe)
+  window.vpnviewerAddTopTabButton = window.vpnviewerAddTopTabButton || function () {
     var doc = window.vpnviewerGetDoc();
-    if (!doc || doc.getElementById("vpnviewer-btn")) return;
+    if (!doc || doc.getElementById("vpnviewer-topbtn")) return;
 
-    // Попробуем поставить сразу после последней из известных кнопок
-    var labels = ["Поделиться","Чат","Сообщение","Run","Добавить событие","Примечания","Действия"];
-    var all = Array.from(doc.querySelectorAll('input[type=button],button,a'));
-    var ref = null;
-    for (var i = 0; i < all.length; i++) {
-      var t = (all[i].value || all[i].textContent || "").trim();
-      if (labels.indexOf(t) !== -1) ref = all[i];
-    }
+    var tabs = window.vpnviewerFindTopTabs();
+    if (!tabs) { try { console.log("[vpnviewer] top tabs not found yet"); } catch(e){}; return; }
 
-    var btn = doc.createElement("input");
-    btn.type = "button";
-    btn.id = "vpnviewer-btn";
-    btn.value = "VPN Viewer";
-    btn.onclick = function () { alert("VPN Viewer нажата"); };
+    // возьмём первую ссылку как образец классов
+    var sample = tabs.querySelector("a");
+    var btn = doc.createElement("a");
+    btn.id = "vpnviewer-topbtn";
+    btn.href = "javascript:void(0)";
+    btn.textContent = "VPN";
+    if (sample && sample.className) btn.className = sample.className;
+    btn.style.marginLeft = "8px";
+    btn.onclick = function(e){ e.preventDefault(); alert("VPN (tab)"); };
 
-    if (ref && ref.parentElement) {
-      ref.insertAdjacentElement("afterend", btn);
-      try { console.log("[vpnviewer] action button inserted after:", (ref.value || ref.textContent).trim()); } catch(e){}
-      return;
-    }
+    // попробуем поместить справа: оборачиваем в span с float:right, чтобы не ломать сетку
+    var wrap = doc.createElement("span");
+    wrap.style.cssText = "float:right; display:inline-block;";
+    wrap.appendChild(btn);
+    tabs.appendChild(wrap);
 
-    var host = window.vpnviewerFindActionBar();
-    if (host) {
-      host.appendChild(btn);
-      try { console.log("[vpnviewer] action button injected into host"); } catch(e){}
-      return;
-    }
-
-    try { console.log("[vpnviewer] action bar not found yet (will retry)"); } catch(e){}
+    try { console.log("[vpnviewer] top tab button injected"); } catch(e){}
   };
 
-  // общий запуск: добавляем обе кнопки и делаем ретраи
   function boot() {
-    window.vpnviewerAddFloatingButton();
-    window.vpnviewerAddActionButton();
+    window.vpnviewerAddTopFloatingButton();
+    window.vpnviewerAddTopTabButton();
 
     if (!window.__vpnviewerRetry) {
       var n = 0;
       window.__vpnviewerRetry = setInterval(function(){
-        window.vpnviewerAddFloatingButton();
-        window.vpnviewerAddActionButton();
+        window.vpnviewerAddTopFloatingButton();
+        window.vpnviewerAddTopTabButton();
         if (++n > 60) { clearInterval(window.__vpnviewerRetry); window.__vpnviewerRetry = null; }
-      }, 250); // до ~15 секунд ждём, пока iframe/DOM стабилизируется
+      }, 250); // до ~15 секунд, пока iframe и вкладки дорендерятся
     }
   }
 
-  api.onWebUIStartupEnd = function () {
-    try { console.log("[vpnviewer] startup"); } catch(e){}
-    // можно включить алерт для наглядности:
-    // try { alert("vpnviewer v0.0.34"); } catch(e){}
-    boot();
-  };
-
+  api.onWebUIStartupEnd = function () { boot(); };
   api.goPageEnd = function () { boot(); };
   api.onDeviceRefreshEnd = function () { boot(); };
 
