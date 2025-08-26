@@ -1,13 +1,12 @@
-// MeshCentral plugin UI: вкладка "VPN .network" + fallback-кнопка + чтение файла.
+// vpnviewer.js — видимый при любом UI: вкладка + плавающая кнопка + панель сверху + "Загрузить конфиг"
 
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
 
-  // Функции, которые подхватит Web-UI
+  // Web-UI hooks
   obj.exports = ['registerPluginTab', 'onWebUIStartupEnd', 'onDeviceRefreshEnd'];
 
-  // Регистрируем вкладку (если сервер умеет рисовать табы плагинов)
   obj.registerPluginTab = function () {
     try { console.log('[vpnviewer] registerPluginTab()'); } catch (e) {}
     return { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
@@ -18,51 +17,78 @@ module.exports.vpnviewer = function (parent) {
   };
 
   obj.onDeviceRefreshEnd = function (divid, currentNode) {
-    // --- helpers объявлены внутри, чтобы попали в клиентский скрипт ---
-    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    try {
+      // 1) Если сервер создал таб — рисуем туда
+      const tabHost = document.getElementById('p_vpnviewer');
+      if (tabHost && !tabHost.dataset.vpnviewerInit) {
+        tabHost.dataset.vpnviewerInit = '1';
+        renderPanel(tabHost, currentNode);
+        console.log('[vpnviewer] render into tab');
+        return;
+      }
 
-    function addFallbackButton() {
-      if (document.getElementById('vpnviewer_btn')) return;
-      const candidates = [
-        document.getElementById('p_actions'),
-        (document.getElementById('p11') || document).querySelector('div.buttons'),
-        document.querySelector('#p11 div.buttons'),
-        document.querySelector('div.buttons')
-      ];
-      const bar = candidates.find(Boolean);
-      if (!bar) return;
-      const btn = document.createElement('input');
-      btn.type = 'button';
-      btn.value = 'VPN .network';
-      btn.id = 'vpnviewer_btn';
-      btn.style.marginLeft = '6px';
-      btn.onclick = function () {
-        const p = document.getElementById('vpnviewer_fallback');
-        if (p) p.style.display = (p.style.display === 'none') ? '' : 'none';
-      };
-      bar.appendChild(btn);
-      try { console.log('[vpnviewer] fallback button added'); } catch (e) {}
+      // 2) Иначе — плавающая кнопка + панель сверху в основном контейнере
+      ensureFloatingButton();
+      const page = getMainPageContainer(divid);
+      if (!page) { console.warn('[vpnviewer] main container not found'); return; }
+
+      let panel = document.getElementById('vpnviewer_panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'vpnviewer_panel';
+        panel.style.border = '1px solid #555';
+        panel.style.borderRadius = '8px';
+        panel.style.margin = '10px 0';
+        panel.style.padding = '10px';
+        panel.style.background = 'rgba(255,255,255,0.03)';
+        // ВСТАВЛЯЕМ САМЫМ ПЕРВЫМ ЭЛЕМЕНТОМ
+        page.insertAdjacentElement('afterbegin', panel);
+      }
+      if (!panel.dataset.vpnviewerInit) {
+        panel.dataset.vpnviewerInit = '1';
+        renderPanel(panel, currentNode);
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        console.log('[vpnviewer] render into pinned panel');
+      }
+    } catch (e) {
+      console.warn('[vpnviewer] onDeviceRefreshEnd error:', e);
     }
 
-    function ensureFallbackPanel(divid) {
-      let p = document.getElementById('vpnviewer_fallback');
-      if (p) return p;
-      p = document.createElement('div');
-      p.id = 'vpnviewer_fallback';
-      p.style.border = '1px solid #555';
-      p.style.borderRadius = '8px';
-      p.style.margin = '8px 0';
-      p.style.padding = '10px';
-      p.style.background = 'rgba(255,255,255,.03)';
-      const host =
+    // ---------- helpers ----------
+    function getMainPageContainer(divid) {
+      // типичные контейнеры карточки устройства
+      return (
         document.getElementById('p11') ||
         (divid ? document.getElementById(divid) : null) ||
         document.getElementById('p12') ||
-        document.body;
-      if (!host) return null;
-      host.appendChild(p);
-      return p;
+        document.querySelector('#p_content') ||
+        document.body
+      );
     }
+
+    function ensureFloatingButton() {
+      if (document.getElementById('vpnviewer_fab')) return;
+      const btn = document.createElement('button');
+      btn.id = 'vpnviewer_fab';
+      btn.textContent = 'VPN .network';
+      btn.className = 'xbutton';
+      btn.style.position = 'fixed';
+      btn.style.right = '16px';
+      btn.style.bottom = '16px';
+      btn.style.zIndex = '2147483647';
+      btn.style.opacity = '0.9';
+      btn.onclick = () => {
+        const p = document.getElementById('vpnviewer_panel');
+        if (!p) return;
+        const show = p.style.display !== 'none';
+        p.style.display = show ? 'none' : '';
+        if (!show) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      document.body.appendChild(btn);
+      console.log('[vpnviewer] floating button added');
+    }
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     function renderPanel(host, currentNode) {
       const label = (currentNode && (currentNode.name || currentNode._id)) || 'unknown';
@@ -83,9 +109,9 @@ module.exports.vpnviewer = function (parent) {
         const nodeid =
           (currentNode && currentNode._id) ||
           (window.meshserver && window.meshserver.currentNode && window.meshserver.currentNode._id);
-        if (!nodeid) { status.textContent = 'nodeid не найден'; return; }
-
         const ms = window.meshserver || (window.parent && window.parent.meshserver);
+
+        if (!nodeid) { status.textContent = 'nodeid не найден'; return; }
         if (!ms || typeof ms.send !== 'function') { status.textContent = 'meshserver недоступен'; return; }
 
         status.textContent = 'Читаю файл…';
@@ -109,30 +135,6 @@ module.exports.vpnviewer = function (parent) {
         ms.addEventListener && ms.addEventListener('servermsg', onmsg);
         ms.send({ action: 'runcommands', nodeid, type: 'linux', runasuser: false, cmd, reply: 1, tag });
       });
-    }
-
-    try {
-      // 1) если сервер создал вкладку — рисуем туда
-      const tabHost = document.getElementById('p_vpnviewer');
-      if (tabHost && !tabHost.dataset.vpnviewerInit) {
-        tabHost.dataset.vpnviewerInit = '1';
-        renderPanel(tabHost, currentNode);
-        console.log('[vpnviewer] render into tab');
-        return;
-      }
-
-      // 2) иначе — fallback
-      addFallbackButton();
-      const panel = ensureFallbackPanel(divid);
-      if (panel && !panel.dataset.vpnviewerInit) {
-        panel.dataset.vpnviewerInit = '1';
-        renderPanel(panel, currentNode);
-        console.log('[vpnviewer] render into fallback panel');
-      } else if (!panel) {
-        console.warn('[vpnviewer] fallback host not found');
-      }
-    } catch (e) {
-      console.warn('[vpnviewer] onDeviceRefreshEnd error:', e);
     }
   };
 
