@@ -19,19 +19,23 @@ module.exports.vpnviewer = function (parent) {
 
   // Вкладка «Плагины» на странице устройства
   obj.onDeviceRefreshEnd = function () {
-    // создаём таб и подсовываем туда iframe с нашей страницей
     pluginHandler.registerPluginTab({
       tabTitle: "Плагины",
       tabId: "pluginVpnViewer"
     });
 
-    // currentNode._id доступен в UI; подставим в src, чтобы внутри iframe знать nodeId
-    const nodeIdExpr = "' + (window.currentNode?currentNode._id:(window.node?node._id:'')) + '";
-    const html = '' +
-      '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" ' +
-      'src="/pluginadmin.ashx?pin=vpnviewer&user=1&node=' + nodeIdExpr + '"></iframe>';
-    // QA заменяет содержимое div с id=pluginVpnViewer
-    QA("pluginVpnViewer", html);
+    // получаем настоящий id узла из UI
+    var nodeId = "";
+    try {
+      nodeId = (window.currentNode && window.currentNode._id) ||
+              (window.node && window.node._id) || "";
+    } catch (e) {}
+
+    var src = "/pluginadmin.ashx?pin=vpnviewer&user=1";
+    if (nodeId) src += "&node=" + encodeURIComponent(nodeId);
+
+    QA("pluginVpnViewer",
+      '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
   // ===== Вспомогалка: ожидание ответа от агента по reqid =====
