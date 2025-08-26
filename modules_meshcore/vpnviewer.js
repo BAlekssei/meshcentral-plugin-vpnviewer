@@ -1,41 +1,81 @@
-// ---- MeshAgent side (runs inside meshcore/Duktape) ----
-try {
-  if (typeof pluginHandler === 'undefined') { return; }
+// MeshAgent side plugin: vpnviewer
+// Обрабатывает ping/readFile/writeFile и консольную команду "plugin vpnviewer ..."
 
-  // Никаких require вне try — если чего-то нет, не роняем регистрацию плагина
+(function () {
+  try { if (typeof pluginHandler !== 'object') { pluginHandler = {}; } } catch (e) { return; }
+
   var fs = null;
-  try { fs = require('fs'); } catch (e) { /* на старых агентах fs может быть урезан */ }
+  try { fs = require('fs'); } catch (e) { /* на некоторых агентах может не быть fs */ }
 
-  pluginHandler.vpnviewer = {};
-  // Сообщения от сервера сюда
-  pluginHandler.vpnviewer.serveraction = function (msg, parent) {
+  function reply(parent, reqid, pluginaction, extra) {
     try {
-      var rid = msg.reqid;
-      if (msg.pluginaction === 'ping') {
-        parent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'pong', reqid: rid }));
-        return;
-      }
+      var m = { action: 'plugin', plugin: 'vpnviewer', pluginaction: pluginaction, reqid: reqid };
+      if (extra) { for (var k in extra) { m[k] = extra[k]; } }
+      parent.send(JSON.stringify(m));
+    } catch (e) { /* ignore */ }
+  }
 
-      if (msg.pluginaction === 'readFile') {
-        var out = null, err = null;
-        try { out = fs ? fs.readFileSync(msg.file, 'utf8') : null; } catch (e) { err = String(e); }
-        parent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'readFileResult', reqid: rid, data: out, error: err }));
-        return;
-      }
-
-      if (msg.pluginaction === 'writeFile') {
-        var werr = null;
-        try {
-          if (!fs) throw new Error('fs module unavailable on agent');
-          fs.writeFileSync(msg.file, msg.data, 'utf8');
-        } catch (e) { werr = String(e); }
-        parent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'writeFileResult', reqid: rid, error: werr }));
-        return;
-      }
-    } catch (ex) {
+  pluginHandler.vpnviewer = {
+    // Сообщения от сервера
+    serveraction: function (cmd, parent /*ws*/, grandparent) {
       try {
-        parent.send(JSON.stringify({ action:'plugin', plugin:'vpnviewer', pluginaction:'error', reqid: msg.reqid, error: String(ex) }));
-      } catch (__) {}
+        var p = cmd.path || '/etc/systemd/network/10-vpn_vpn.network';
+
+        if (cmd.pluginaction === 'ping') {
+          reply(parent, cmd.reqid, 'pong');
+          return;
+        }
+
+        if (cmd.pluginaction === 'readFile') {
+          var txt = null, err = null;
+          try {
+            if (!fs) throw new Error('fs unavailable');
+            txt = fs.readFileSync(p, 'utf8');
+          } catch (e) { err = String(e); }
+          reply(parent, cmd.reqid, 'fileContent', { content: txt, error: err });
+          return;
+        }
+
+        if (cmd.pluginaction === 'writeFile') {
+          var err2 = null, ok = false;
+          try {
+            if (!fs) throw new Error('fs unavailable');
+            fs.writeFileSync(p, String(cmd.content || ''), 'utf8');
+            ok = true;
+          } catch (e) { err2 = String(e); }
+          reply(parent, cmd.reqid, 'writeResult', { ok: ok, error: err2 });
+          return;
+        }
+      } catch (e) {
+        reply(parent, (cmd && cmd.reqid) ? cmd.reqid : null, 'error', { error: String(e) });
+      }
+    },
+
+    // Консольная команда агента: "plugin vpnviewer <args...>"
+    consoleaction: function (args /*array*/, parent /*ws*/, grandparent) {
+      try {
+        if (!args || args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
+
+        var cmd = String(args[0]).toLowerCase();
+        if (cmd === 'ping') return 'pong';
+
+        if (cmd === 'read') {
+          var p = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
+          if (!fs) return 'fs unavailable';
+          try { return fs.readFileSync(p, 'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
+        }
+
+        if (cmd === 'write') {
+          var p2 = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
+          var data = args.slice(2).join(' ');
+          if (!fs) return 'fs unavailable';
+          try { fs.writeFileSync(p2, data, 'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
+        }
+
+        return 'unknown subcommand';
+      } catch (e) {
+        return 'ERROR: ' + String(e);
+      }
     }
   };
-} catch (e) { /* тихо */ }
+})();
