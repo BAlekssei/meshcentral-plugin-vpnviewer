@@ -1,36 +1,23 @@
-// Минимальный плагин: добавляет вкладку "VPN .network" на карточку устройства
-// Важно: экспорт функции с именем shortName и registerPluginTab как ОБЪЕКТ.
+// Мини-плагин: создаёт вкладку "VPN .network" и выводит заглушку.
+// ВАЖНО: module.exports.<shortName> и НЕ класть registerPluginTab в exports.
 
 module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
 
-  // Экспортируемые хуки в Web UI
-  obj.exports = [
-    'registerPluginTab',
-    'onWebUIStartupEnd',
-    'onDeviceRefreshEnd',
-    'goPageEnd'
-  ];
+  // Только функции тут! (Иначе объект превратится в [object Object] в UI-скрипте)
+  obj.exports = ['onWebUIStartupEnd', 'onDeviceRefreshEnd'];
 
-  // <<< КЛЮЧЕВОЕ >>> — объект, а не функция
+  // Спец-поле, которое MeshCentral сам подхватит при сборке UI
   obj.registerPluginTab = { tabId: 'vpnviewer', tabTitle: 'VPN .network' };
 
   obj.onWebUIStartupEnd = function () {
     try { console.log('[vpnviewer] UI loaded'); } catch (e) {}
   };
 
-  // Логируем смену страниц, чтобы видеть, что UI нас дергает
-  obj.goPageEnd = function (pageId, ev) {
-    try { console.log('[vpnviewer] goPageEnd:', pageId); } catch (e) {}
-  };
-
   obj.onDeviceRefreshEnd = function (divid, currentNode) {
     try {
-      console.log('[vpnviewer] onDeviceRefreshEnd, divid =', divid);
-      // Mesh создаёт контейнер с id "p_<tabId>"
-      const host = document.getElementById(divid || 'p_vpnviewer') ||
-                   document.getElementById('p_vpnviewer');
+      const host = document.getElementById(divid || 'p_vpnviewer') || document.getElementById('p_vpnviewer');
       if (!host) { console.warn('[vpnviewer] host div not found'); return; }
       if (host.dataset.vpnviewerInit) return;
       host.dataset.vpnviewerInit = '1';
