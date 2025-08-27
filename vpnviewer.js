@@ -36,14 +36,13 @@ module.exports.vpnviewer = function (parent) {
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  // Позволяет команде "plugin vpnviewer ..." не падать
+  // --- консольная команда сервера: "plugin vpnviewer ..."
   obj.consoleaction = function (args /* array */, myparent, grandparent) {
-    // Это обработчик КОМАНДЫ КОНСОЛИ на СЕРВЕРЕ (не агенте).
-    // Здесь просто отвечаем, чтобы увидеть "жив ли" серверный плагин.
+    // Ничего с агентом здесь не делаем — просто отвечаем, чтобы команда не падала.
     if (args && args[0] && String(args[0]).toLowerCase() === 'ping') {
       return 'vpnviewer server plugin: pong';
     }
-    return 'vpnviewer server plugin: console ok. Для проверки агентного модуля используйте вкладку «Плагины» → «Проверка модуля».';
+    return 'vpnviewer server plugin: console ok';
   };
 
     // Позволяет команде "plugin vpnviewer ..." не падать
