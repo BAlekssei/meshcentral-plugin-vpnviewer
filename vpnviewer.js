@@ -129,6 +129,10 @@ module.exports.vpnviewer = function (parent) {
   // ответы от агента → резолвим ожидатели
   obj.serveraction = function (command) {
     try {
+      // ВРЕМЕННЫЙ ЛОГ
+      if (command && command.plugin === 'vpnviewer') {
+        console.log('[vpnviewer] reply:', command.pluginaction, 'reqid=', command.reqid);
+      }
       const fn = (command && command.reqid) ? obj.pending[command.reqid] : null;
       if (!fn) return;
       switch (command.pluginaction) {
@@ -139,7 +143,7 @@ module.exports.vpnviewer = function (parent) {
         case 'writeFileResult': fn({ pluginaction:'writeFileResult', ok:!command.error,          error:command.error||null }); break;
         default: fn({ ok:false, error:'unknown reply: '+command.pluginaction }); break;
       }
-    } catch (_) {}
+    } catch (e) { console.log('[vpnviewer] serveraction error:', e); }
   };
 
   return obj;
