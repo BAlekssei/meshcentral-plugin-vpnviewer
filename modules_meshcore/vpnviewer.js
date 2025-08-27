@@ -12,6 +12,7 @@
   function consoleaction(args /*array|string*/, parent, grandparent) {
     if (typeof args === 'string') args = args.split(' ');
     if (!args || args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
+    if (String(args[0]).toLowerCase() === 'plugin') args = args.slice(1);
     if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
     var sub = String((args[0] || '')).toLowerCase();
 
