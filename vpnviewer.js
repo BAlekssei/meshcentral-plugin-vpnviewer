@@ -129,7 +129,9 @@ module.exports.vpnviewer = function (parent) {
   // ответы от агента → резолвим ожидатели
   obj.serveraction = function (command) {
     try {
-      console.log('[vpnviewer][srv] reply:', command && command.pluginaction, 'reqid=', command && command.reqid);
+      if (command && command.plugin === 'vpnviewer') {
+      console.log('[vpnviewer][srv] reply:', command.pluginaction, 'reqid=', command.reqid, 'nodeid=', command.nodeid);
+      }
       const fn = (command && command.reqid) ? obj.pending[command.reqid] : null;
       if (!fn) return;
       switch (command.pluginaction) {

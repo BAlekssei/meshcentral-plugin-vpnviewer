@@ -12,7 +12,15 @@
   var fs = null; try { fs = require('fs'); } catch (_e) {}
 
   function send(parent, reqid, act, extra) {
-    var m = { action: 'plugin', plugin: 'vpnviewer', pluginaction: act, reqid: reqid };
+    var m = {
+      action: 'plugin',
+      plugin: 'vpnviewer',
+      pluginaction: act,
+      reqid: reqid,
+      nodeid: parent && parent.dbNodeKey,   // << ВАЖНО для роутинга
+      rights: true,                         // совместимость с обработчиком
+      sessionid: true
+    };
     if (extra) { for (var k in extra) { m[k] = extra[k]; } }
     try { parent.send(JSON.stringify(m)); } catch (_) {}
   }
