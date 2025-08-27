@@ -11,7 +11,8 @@
   // КОНСОЛЬНАЯ команда агента: "plugin vpnviewer <...>"
   function consoleaction(args /*array*/, parent, grandparent) {
     if (!args || args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
-    var sub = String(args[0]).toLowerCase();
+    if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
+    var sub = String((args[0] || '')).toLowerCase();
 
     if (sub === 'ping') return 'pong';
 
