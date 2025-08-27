@@ -36,7 +36,8 @@ module.exports.vpnviewer = function (parent) {
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  obj.consoleaction = function (args /* array */, myparent, grandparent) {
+  obj.consoleaction = function (args /* array|string */, myparent, grandparent) {
+    if (typeof args === 'string') args = args.split(' ');
     if (Array.isArray(args) && args.length > 0) {
       if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
       const sub = String((args[0] || '')).toLowerCase();
