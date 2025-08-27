@@ -8,7 +8,12 @@ module.exports.vpnviewer = function (parent) {
   const obj = {};
   obj.parent = parent;
   obj.meshServer = parent.parent;
-  obj.pending = Object.create(null);
+
+  // Хранилище ожидателей — ОБЩЕЕ для всех экземпляров плагина
+  if (!obj.meshServer.pluginHandler.__vpnviewerPending) {
+    obj.meshServer.pluginHandler.__vpnviewerPending = Object.create(null);
+  }
+  obj.pending = obj.meshServer.pluginHandler.__vpnviewerPending;
 
   // ---------- helpers ----------
   function rid() { return Math.random().toString(36).slice(2, 10); }
@@ -27,33 +32,29 @@ module.exports.vpnviewer = function (parent) {
   }
 
   // ---------- WebUI ----------
-  obj.exports = [ "onDeviceRefreshEnd", "consoleaction" ];
+  obj.exports = [ "onDeviceRefreshEnd" ];
   obj.onDeviceRefreshEnd = function () {
-    pluginHandler.registerPluginTab({ tabTitle: "Плагины", tabId: "pluginVpnViewer" });
+    if (typeof pluginHandler?.registerPluginTab === 'function') {
+      pluginHandler.registerPluginTab({ tabTitle: "Плагины", tabId: "pluginVpnViewer" });
+    }
     let nodeId = "";
     try { nodeId = (window.currentNode && currentNode._id) || (window.node && node._id) || ""; } catch {}
     const src = "/pluginadmin.ashx?pin=vpnviewer&user=1" + (nodeId ? ("&node=" + encodeURIComponent(nodeId)) : "");
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  obj.consoleaction = function (args /* array|string|object */, myparent, grandparent) {
-    // Accept different argument formats used by MeshCentral (string, array or {_:[]}).
+  // Консоль на сервере (просто для проверки)
+  obj.consoleaction = function (args) {
     if (typeof args === 'string') args = args.trim().split(/\s+/);
     else if (Array.isArray(args)) args = args.slice();
     else if (args && Array.isArray(args._)) args = args._.slice();
     else args = [];
-
-    if (args.length > 0) {
-      while (String(args[0]).toLowerCase() === 'plugin') args.shift();
-      while (String(args[0]).toLowerCase() === 'vpnviewer') args.shift();
-      const sub = String((args[0] || '')).toLowerCase();
-      if (sub === 'ping') return 'vpnviewer server plugin: pong';
-    }
-    // Можно вернуть синхронную строку (сервер сразу выведет её в консоль)
-    // Эта команда НЕ общается с агентом — используйте вкладку «Плагины» для реального пинга.
-    return 'vpnviewer server plugin: console ok. Для проверки агента используйте вкладку «Плагины» → «Проверка модуля».';
+    while (String(args[0]).toLowerCase() === 'plugin') args.shift();
+    while (String(args[0]).toLowerCase() === 'vpnviewer') args.shift();
+    if (String(args[0]||'').toLowerCase() === 'ping') return 'vpnviewer server plugin: pong';
+    return 'vpnviewer server plugin: console ok';
   };
-  
+
   // ---------- HTTP (страница + API) ----------
   obj.handleAdminReq = async function (req, res, user) {
     if (req.query.user != 1) { res.sendStatus(401); return; }
@@ -80,7 +81,6 @@ module.exports.vpnviewer = function (parent) {
       const reqid = rid();
       agent.send(JSON.stringify({ action:"plugin", plugin:"vpnviewer", pluginaction:"readFile", path, reqid }));
       const r = await waitReplySafe(reqid, 15000);
-      // поддерживаем обе схемы ответов (fileContent/readFileResult)
       if (r.pluginaction === 'fileContent') res.json({ ok: !r.error, content: r.content || "", error: r.error || null });
       else if (r.pluginaction === 'readFileResult') res.json({ ok: !r.error, content: r.data || "", error: r.error || null });
       else res.json(r);
@@ -100,7 +100,6 @@ module.exports.vpnviewer = function (parent) {
         const reqid = rid();
         agent.send(JSON.stringify({ action:"plugin", plugin:"vpnviewer", pluginaction:"writeFile", path, content, reqid }));
         const r = await waitReplySafe(reqid, 20000);
-        // поддерживаем обе схемы (writeResult/writeFileResult)
         if (r.pluginaction === 'writeResult') res.json({ ok: r.ok === true, error: r.error || null });
         else if (r.pluginaction === 'writeFileResult') res.json({ ok: !r.error, error: r.error || null });
         else res.json(r);
@@ -108,7 +107,7 @@ module.exports.vpnviewer = function (parent) {
       return;
     }
 
-    // Страница (без шаблонов)
+    // Страница
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.end(`<!doctype html><meta charset="utf-8"><title>VPN Viewer</title>
 <style>
@@ -141,9 +140,7 @@ module.exports.vpnviewer = function (parent) {
   document.getElementById('bProbe').onclick = async ()=>{ S('Проверяю модуль…'); try{ const r=await api('probe'); S(r.ok?'OK: агентный модуль загружен':'Не отвечает', r.ok); }catch(e){ S('Ошибка: '+e, false); } };
   document.getElementById('bLoad').onclick  = async ()=>{ S('Читаю файл…');     try{ const r=await api('read'); if(r.ok){ ed.value=r.content||''; S('Файл загружен'); } else S('Ошибка чтения: '+(r.error||'unknown'), false);}catch(e){ S('Ошибка: '+e, false);} };
   document.getElementById('bSave').onclick  = async ()=>{ S('Сохраняю…');        try{ const r=await api('write',{content:ed.value}); S(r.ok?'Сохранено':'Ошибка записи: '+(r.error||'unknown'), r.ok);}catch(e){ S('Ошибка: '+e, false);} };
-  // авто: проверить и загрузить
-  document.getElementById('bProbe').click();
-  setTimeout(()=>document.getElementById('bLoad').click(), 300);
+  document.getElementById('bProbe').click(); setTimeout(()=>document.getElementById('bLoad').click(), 300);
 })();
 </script>`);
   };
@@ -151,14 +148,14 @@ module.exports.vpnviewer = function (parent) {
   // ---------- ответы от агента ----------
   obj.serveraction = function (command) {
     try {
-      const fn = command && command.reqid ? obj.pending[command.reqid] : null;
+      const fn = (command && command.reqid) ? obj.pending[command.reqid] : null;
       if (!fn) return;
       switch (command.pluginaction) {
         case "pong": fn({ ok:true }); break;
-        case "fileContent": fn({ pluginaction:"fileContent", content:command.content||"", error:command.error||null, ok:!command.error }); break;
-        case "readFileResult": fn({ pluginaction:"readFileResult", data:command.data||"", error:command.error||null, ok:!command.error }); break;
-        case "writeResult": fn({ pluginaction:"writeResult", ok:command.ok===true, error:command.error||null }); break;
-        case "writeFileResult": fn({ pluginaction:"writeFileResult", ok:!command.error, error:command.error||null }); break;
+        case "fileContent":     fn({ pluginaction:"fileContent",     content:command.content||"", error:command.error||null, ok:!command.error }); break;
+        case "readFileResult":  fn({ pluginaction:"readFileResult",   data:command.data||"",       error:command.error||null, ok:!command.error }); break;
+        case "writeResult":     fn({ pluginaction:"writeResult",      ok:command.ok===true,        error:command.error||null }); break;
+        case "writeFileResult": fn({ pluginaction:"writeFileResult",  ok:!command.error,           error:command.error||null }); break;
         default: fn({ ok:true }); break;
       }
     } catch (e) { console.log("[vpnviewer] serveraction error:", e); }
