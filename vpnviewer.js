@@ -38,7 +38,8 @@ module.exports.vpnviewer = function (parent) {
 
   obj.consoleaction = function (args /* array */, myparent, grandparent) {
     if (Array.isArray(args) && args.length > 0) {
-      const sub = String(args[0]).toLowerCase();
+      if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
+      const sub = String((args[0] || '')).toLowerCase();
       if (sub === 'ping') return 'vpnviewer server plugin: pong';
     }
     // Можно вернуть синхронную строку (сервер сразу выведет её в консоль)
