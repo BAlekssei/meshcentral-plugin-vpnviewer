@@ -1,22 +1,24 @@
-// MeshAgent plugin "vpnviewer": регистрируемся одновременно в
-// pluginHandler.vpnviewer, pluginHandler.plugins.vpnviewer и plugins.vpnviewer.
+// MeshAgent plugin "vpnviewer": регистрируемся в трех реестрах,
+// чтобы и консоль, и сообщения сервера гарантированно работали.
 (function () {
-  // доступ к глобалу и создание нужных реестров
+  // глобаль
   var g; try { g = global; } catch (_) { g = this; }
-  if (typeof g.pluginHandler !== 'object') { g.pluginHandler = {}; }
-  if (typeof g.pluginHandler.plugins !== 'object') { g.pluginHandler.plugins = {}; }
-  if (typeof g.plugins !== 'object') { g.plugins = {}; }   // совместимость со старыми ядрами
 
-  var fs = null; try { fs = require('fs'); } catch (e) {}
+  // гарантируем наличие реестров (некоторые ядра их создают не сразу)
+  if (typeof g.pluginHandler !== 'object') g.pluginHandler = {};
+  if (typeof g.pluginHandler.plugins !== 'object') g.pluginHandler.plugins = {};
+  if (typeof g.plugins !== 'object') g.plugins = {};
+
+  var fs = null; try { fs = require('fs'); } catch (_e) {}
 
   function send(parent, reqid, act, extra) {
-    var m = { action:'plugin', plugin:'vpnviewer', pluginaction:act, reqid:reqid };
+    var m = { action: 'plugin', plugin: 'vpnviewer', pluginaction: act, reqid: reqid };
     if (extra) { for (var k in extra) { m[k] = extra[k]; } }
     try { parent.send(JSON.stringify(m)); } catch (_) {}
   }
 
   var mod = {
-    // консоль агента: "plugin vpnviewer ..."
+    // "plugin vpnviewer …" в консоли агента
     consoleaction: function (args) {
       if (typeof args === 'string') args = args.trim().split(/\s+/);
       else if (Array.isArray(args)) args = args.slice();
@@ -30,18 +32,18 @@
       if (sub === 'read') {
         var p = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         if (!fs) return 'fs unavailable';
-        try { return fs.readFileSync(p,'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
+        try { return fs.readFileSync(p, 'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
       }
       if (sub === 'write') {
         var p2 = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         var data = args.slice(2).join(' ');
         if (!fs) return 'fs unavailable';
-        try { fs.writeFileSync(p2,data,'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
+        try { fs.writeFileSync(p2, data, 'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
       }
       return 'unknown subcommand';
     },
 
-    // сервер ⇄ агент для кнопок UI
+    // обработчик сообщений сервера (используется кнопками UI)
     serveraction: function (cmd, parent) {
       try {
         if (!cmd || !parent) return;
@@ -51,28 +53,28 @@
         if (cmd.pluginaction === 'ping') { send(parent, rid, 'pong'); return; }
 
         if (cmd.pluginaction === 'readFile') {
-          var txt=null, err=null;
-          try { if (!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(path,'utf8'); } catch (e) { err = String(e); }
+          var txt = null, err = null;
+          try { if (!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(path, 'utf8'); } catch (e) { err = String(e); }
           send(parent, rid, 'fileContent', { content: txt, error: err }); return;
         }
 
         if (cmd.pluginaction === 'writeFile') {
-          var ok=false, err2=null;
-          try { if (!fs) throw new Error('fs unavailable'); fs.writeFileSync(path, String(cmd.content||''), 'utf8'); ok = true; } catch (e) { err2 = String(e); }
+          var ok = false, err2 = null;
+          try { if (!fs) throw new Error('fs unavailable'); fs.writeFileSync(path, String(cmd.content || ''), 'utf8'); ok = true; } catch (e) { err2 = String(e); }
           send(parent, rid, 'writeResult', { ok: ok, error: err2 }); return;
         }
 
-        send(parent, rid, 'error', { error:'unknown action' });
+        send(parent, rid, 'error', { error: 'unknown action' });
       } catch (e) {
-        send(parent, (cmd && cmd.reqid) ? cmd.reqid : null, 'error', { error:String(e) });
+        send(parent, (cmd && cmd.reqid) ? cmd.reqid : null, 'error', { error: String(e) });
       }
     }
   };
 
-  // <<< КРИТИЧНАЯ РЕГИСТРАЦИЯ ВО ВСЕХ РЕЕСТРАХ >>>
-  g.pluginHandler.vpnviewer = mod;                 // сюда смотрят сообщения server→agent
-  g.pluginHandler.plugins.vpnviewer = mod;         // сюда смотрит консоль "plugin <name>"
-  g.plugins.vpnviewer = mod;                       // совместимость
+  // РЕГИСТРАЦИЯ во всех местах, которые могут использоваться ядром
+  g.pluginHandler.vpnviewer = mod;
+  g.pluginHandler.plugins.vpnviewer = mod;
+  g.plugins.vpnviewer = mod;
 
   try { module.exports = mod; } catch (_) {}
 })();
