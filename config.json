@@ -1,7 +1,7 @@
 {
   "name": "VPN Viewer",
   "shortName": "vpnviewer",
-  "version": "0.0.68",
+  "version": "0.0.69",
   "author": "BAlekssei",
   "description": "Test plugin: adds VPN .network tab",
   "hasAdminPanel": false,

@@ -1,6 +1,8 @@
-// /opt/meshcentral/meshcentral-data/plugins/vpnviewer/modules_meshcore/vpnviewer.js
+// MeshAgent plugin: vpnviewer
+// Регистрируемся в runtime агента (без module.exports!)
 (function () {
-  if (typeof plugins !== 'object') { return; }            // в агенте всегда есть global plugins
+  // в агенте всегда есть global `plugins`; если по какой-то причине нет — просто выходим
+  if (typeof plugins !== 'object') { return; }
   var fs = null; try { fs = require('fs'); } catch (e) {}
 
   function send(parent, reqid, act, extra) {
@@ -10,26 +12,29 @@
   }
 
   plugins.vpnviewer = {
-    // консоль агента: "plugin vpnviewer ..."
+    // консольная команда агента: "plugin vpnviewer ..."
     consoleaction: function (args) {
       if (!args || !args.length) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
       var sub = String(args[0]).toLowerCase();
       if (sub === 'ping') return 'pong';
+
       if (sub === 'read') {
         var p = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         if (!fs) return 'fs unavailable';
-        try { return fs.readFileSync(p,'utf8'); } catch(e){ return 'ERROR: ' + String(e); }
+        try { return fs.readFileSync(p, 'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
       }
+
       if (sub === 'write') {
         var p2 = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         var data = args.slice(2).join(' ');
         if (!fs) return 'fs unavailable';
-        try { fs.writeFileSync(p2,data,'utf8'); return 'OK'; } catch(e){ return 'ERROR: ' + String(e); }
+        try { fs.writeFileSync(p2, data, 'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
       }
+
       return 'unknown subcommand';
     },
 
-    // канал сервер↔агент для кнопок UI
+    // сервер ⇄ агент для кнопок UI
     serveraction: function (cmd, parent) {
       try {
         var rid  = cmd && cmd.reqid;
