@@ -1,70 +1,66 @@
-// /opt/meshcentral/meshcentral-data/plugins/vpnviewer/modules_meshcore/vpnviewer.js
-// Агентский модуль: регистрируем через `plugins.vpnviewer`.
-// Требуется для консольной команды `plugin vpnviewer ...` и обмена сервер<->агент.
-
+// modules_meshcore/vpnviewer.js — модуль для MeshAgent (как в ScriptTask: через pluginHandler.<name>)
 (function () {
-  // В MeshAgent есть глобальный объект `plugins`, куда нужно регистрировать модуль
-  if (typeof plugins !== 'object') { return; } // если по какой-то причине нет — просто выходим
+  try { if (typeof pluginHandler !== 'object') { pluginHandler = {}; } } catch (e) { return; }
 
   var fs = null; try { fs = require('fs'); } catch (e) {}
 
-  function send(parent, reqid, act, extra) {
+  function reply(parent, reqid, act, extra) {
     var m = { action: 'plugin', plugin: 'vpnviewer', pluginaction: act, reqid: reqid };
     if (extra) { for (var k in extra) { m[k] = extra[k]; } }
-    try { parent.send(JSON.stringify(m)); } catch (e) {}
+    try { parent.send(JSON.stringify(m)); } catch (_) {}
   }
 
-  plugins.vpnviewer = {
-    // 1) Консольная команда агента: "plugin vpnviewer <...>"
-    consoleaction: function (args) {
+  // Один общий объект, как у ScriptTask
+  pluginHandler.vpnviewer = {
+    // КОНСОЛЬНАЯ команда агента: "plugin vpnviewer <...>"
+    consoleaction: function (args /*array*/, parent, grandparent) {
       if (!args || args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
       var sub = String(args[0]).toLowerCase();
 
       if (sub === 'ping') return 'pong';
 
       if (sub === 'read') {
-        var path = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
+        var p = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         if (!fs) return 'fs unavailable';
-        try { return fs.readFileSync(path, 'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
+        try { return fs.readFileSync(p, 'utf8'); } catch (e) { return 'ERROR: ' + String(e); }
       }
 
       if (sub === 'write') {
-        var path2 = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
+        var p2 = args[1] || '/etc/systemd/network/10-vpn_vpn.network';
         var data = args.slice(2).join(' ');
         if (!fs) return 'fs unavailable';
-        try { fs.writeFileSync(path2, data, 'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
+        try { fs.writeFileSync(p2, data, 'utf8'); return 'OK'; } catch (e) { return 'ERROR: ' + String(e); }
       }
 
       return 'unknown subcommand';
     },
 
-    // 2) Канал сервер<->агент для вашего UI: ping/readFile/writeFile
-    serveraction: function (cmd, parent /* ws */) {
+    // Канал сервер→агент для UI (ping/readFile/writeFile)
+    serveraction: function (cmd, parent /*ws*/, grandparent) {
       try {
-        var rid = cmd && cmd.reqid;
-        var path = (cmd && cmd.path) || '/etc/systemd/network/10-vpn_vpn.network';
-
         if (!cmd || !parent) return;
+        var p = cmd.path || '/etc/systemd/network/10-vpn_vpn.network';
+        var rid = cmd.reqid;
 
-        if (cmd.pluginaction === 'ping') { send(parent, rid, 'pong'); return; }
+        if (cmd.pluginaction === 'ping') { reply(parent, rid, 'pong'); return; }
 
         if (cmd.pluginaction === 'readFile') {
           var txt = null, err = null;
-          try { if (!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(path, 'utf8'); } catch (e) { err = String(e); }
-          send(parent, rid, 'fileContent', { content: txt, error: err });
+          try { if (!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(p, 'utf8'); } catch (e) { err = String(e); }
+          reply(parent, rid, 'fileContent', { content: txt, error: err });
           return;
         }
 
         if (cmd.pluginaction === 'writeFile') {
           var ok = false, err2 = null;
-          try { if (!fs) throw new Error('fs unavailable'); fs.writeFileSync(path, String(cmd.content || ''), 'utf8'); ok = true; } catch (e) { err2 = String(e); }
-          send(parent, rid, 'writeResult', { ok: ok, error: err2 });
+          try { if (!fs) throw new Error('fs unavailable'); fs.writeFileSync(p, String(cmd.content || ''), 'utf8'); ok = true; } catch (e) { err2 = String(e); }
+          reply(parent, rid, 'writeResult', { ok: ok, error: err2 });
           return;
         }
 
-        send(parent, rid, 'error', { error: 'unknown action' });
+        reply(parent, rid, 'error', { error: 'unknown action' });
       } catch (e) {
-        send(parent, (cmd && cmd.reqid) ? cmd.reqid : null, 'error', { error: String(e) });
+        reply(parent, (cmd && cmd.reqid) ? cmd.reqid : null, 'error', { error: String(e) });
       }
     }
   };

@@ -36,12 +36,8 @@ module.exports.vpnviewer = function (parent) {
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  // --- консольная команда сервера: "plugin vpnviewer ..."
-  obj.consoleaction = function (args /* array */, myparent, grandparent) {
-    // Ничего с агентом здесь не делаем — просто отвечаем, чтобы команда не падала.
-    if (args && args[0] && String(args[0]).toLowerCase() === 'ping') {
-      return 'vpnviewer server plugin: pong';
-    }
+  obj.consoleaction = function (args, myparent, grandparent) {
+    if (args && args[0] && String(args[0]).toLowerCase() === 'ping') return 'vpnviewer server plugin: pong';
     return 'vpnviewer server plugin: console ok';
   };
 
