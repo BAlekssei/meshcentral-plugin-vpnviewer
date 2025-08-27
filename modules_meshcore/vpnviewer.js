@@ -9,11 +9,15 @@
   }
 
   // КОНСОЛЬНАЯ команда агента: "plugin vpnviewer <...>"
-  function consoleaction(args /*array|string*/, parent, grandparent) {
-    if (typeof args === 'string') args = args.split(' ');
-    if (!args || args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
-    if (String(args[0]).toLowerCase() === 'plugin') args = args.slice(1);
-    if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
+  function consoleaction(args /*array|string|object*/, parent, grandparent) {
+    // MeshCentral may pass args as string, array or {_:[]}; handle all cases.
+    if (typeof args === 'string') args = args.trim().split(/\s+/);
+    else if (Array.isArray(args)) args = args.slice();
+    else if (args && Array.isArray(args._)) args = args._.slice();
+    else args = [];
+    if (args.length === 0) return "usage: plugin vpnviewer [ping|read <path>|write <path> <text>]";
+    while (String(args[0]).toLowerCase() === 'plugin') args.shift();
+    while (String(args[0]).toLowerCase() === 'vpnviewer') args.shift();
     var sub = String((args[0] || '')).toLowerCase();
 
     if (sub === 'ping') return 'pong';

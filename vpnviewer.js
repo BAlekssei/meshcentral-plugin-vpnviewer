@@ -36,11 +36,16 @@ module.exports.vpnviewer = function (parent) {
     QA("pluginVpnViewer", '<iframe id="vpnviewerFrame" style="width:100%;height:720px;border:0;overflow:auto" src="' + src + '"></iframe>');
   };
 
-  obj.consoleaction = function (args /* array|string */, myparent, grandparent) {
-    if (typeof args === 'string') args = args.split(' ');
-    if (Array.isArray(args) && args.length > 0) {
-      if (String(args[0]).toLowerCase() === 'plugin') args = args.slice(1);
-      if (String(args[0]).toLowerCase() === 'vpnviewer') args = args.slice(1);
+  obj.consoleaction = function (args /* array|string|object */, myparent, grandparent) {
+    // Accept different argument formats used by MeshCentral (string, array or {_:[]}).
+    if (typeof args === 'string') args = args.trim().split(/\s+/);
+    else if (Array.isArray(args)) args = args.slice();
+    else if (args && Array.isArray(args._)) args = args._.slice();
+    else args = [];
+
+    if (args.length > 0) {
+      while (String(args[0]).toLowerCase() === 'plugin') args.shift();
+      while (String(args[0]).toLowerCase() === 'vpnviewer') args.shift();
       const sub = String((args[0] || '')).toLowerCase();
       if (sub === 'ping') return 'vpnviewer server plugin: pong';
     }
