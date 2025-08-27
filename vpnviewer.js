@@ -27,7 +27,7 @@ module.exports.vpnviewer = function (parent) {
   }
 
   // ---------- WebUI ----------
-  obj.exports = [ "onDeviceRefreshEnd" ];
+  obj.exports = [ "onDeviceRefreshEnd", "consoleaction" ];
   obj.onDeviceRefreshEnd = function () {
     pluginHandler.registerPluginTab({ tabTitle: "Плагины", tabId: "pluginVpnViewer" });
     let nodeId = "";
