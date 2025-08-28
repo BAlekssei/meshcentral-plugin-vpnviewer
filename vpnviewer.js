@@ -183,7 +183,7 @@ module.exports.vpnviewer = function (parent) {
           const content = (typeof body.content === "string") ? body.content : "";
           const agent = findAgent(node);
           if (!agent) return res.json({ ok:false, error:"Agent offline" });
-          const reqid = rid();
+          const reqid = rid();git 
           const msg = { action:"plugin", plugin:"vpnviewer", pluginaction:"writeFile", reqid, path, content };
           console.log('[vpnviewer] [write] send->', msg);
           agent.send(JSON.stringify(msg));
