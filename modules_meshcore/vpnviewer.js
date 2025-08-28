@@ -8,10 +8,7 @@
   }
 
   function serveraction(cmd, parent) {
-    try {
-      // ВРЕМЕННЫЙ ЛОГ — должен появиться в КОНСОЛИ УЗЛА при нажатии «Проверка модуля»
-      print('[vpnviewer][agent] serveraction:', (cmd && cmd.pluginaction) || '<?>');
-
+    try { print('[vpnviewer][core] serveraction:', (cmd && cmd.pluginaction) || '<?>'); } catch(e){};
       if (cmd && cmd.pluginaction === 'ping') { reply(parent, cmd.reqid, 'pong'); return; }
       if (cmd && cmd.pluginaction === 'readFile') {
         var txt=null, err=null;
