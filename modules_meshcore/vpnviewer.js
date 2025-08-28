@@ -7,22 +7,26 @@
     try { parent.send(JSON.stringify(m)); } catch (_) {}
   }
 
-  function serveraction(cmd, parent) {
-    try { print('[vpnviewer][core] serveraction:', (cmd && cmd.pluginaction) || '<?>'); } catch(e){};
+  function serveraction(cmd, parent, grandparent) {
+    try {
+      try { print('[vpnviewer][core] serveraction:', (cmd && cmd.pluginaction) || '<?>'); } catch(e){}
       if (cmd && cmd.pluginaction === 'ping') { reply(parent, cmd.reqid, 'pong'); return; }
+
       if (cmd && cmd.pluginaction === 'readFile') {
-        var txt=null, err=null;
-        try { if(!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(cmd.path||'/etc/systemd/network/10-vpn_vpn.network','utf8'); }
-        catch (e) { err = String(e); }
+        var p = cmd.path || '/etc/systemd/network/10-vpn_vpn.network';
+        var txt = null, err = null;
+        try { if (!fs) throw new Error('fs unavailable'); txt = fs.readFileSync(p, 'utf8'); } catch (e) { err = String(e); }
         reply(parent, cmd.reqid, 'fileContent', { content: txt, error: err }); return;
       }
+
       if (cmd && cmd.pluginaction === 'writeFile') {
-        var ok=false, err2=null;
-        try { if(!fs) throw new Error('fs unavailable'); fs.writeFileSync(cmd.path||'/etc/systemd/network/10-vpn_vpn.network', String(cmd.content||''), 'utf8'); ok=true; }
-        catch (e) { err2 = String(e); }
+        var p2 = cmd.path || '/etc/systemd/network/10-vpn_vpn.network';
+        var ok = false, err2 = null;
+        try { if (!fs) throw new Error('fs unavailable'); fs.writeFileSync(p2, String(cmd.content || ''), 'utf8'); ok = true; } catch (e) { err2 = String(e); }
         reply(parent, cmd.reqid, 'writeResult', { ok: ok, error: err2 }); return;
       }
-      reply(parent, cmd.reqid, 'error', { error: 'unknown action' });
+
+      reply(parent, cmd && cmd.reqid, 'error', { error: 'unknown action' });
     } catch (e) {
       reply(parent, cmd && cmd.reqid, 'error', { error: String(e) });
     }
